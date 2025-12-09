@@ -1,0 +1,67 @@
+# Dependencies
+node_modules
+.DS_Store
+
+# Build outputs
+/build
+/.svelte-kit
+/package
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+/lib/
+/lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+*.swp
+*.swo
+.vscode/settings.json
+
+# Tauri
+src-tauri/target/
+
+# Data (local only)
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Meilisearch
+meili_data/
+dumps/
+meilisearch.exe
+meilisearch
