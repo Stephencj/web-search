@@ -2,7 +2,17 @@
  * API client for communicating with the Python backend.
  */
 
-const API_BASE = 'http://localhost:8000/api';
+// Use the same hostname as the frontend but on port 8000 for API calls
+// This allows the app to work from any device on the network
+const getApiBase = () => {
+  if (typeof window === 'undefined') {
+    return 'http://localhost:8000/api';
+  }
+  const hostname = window.location.hostname;
+  return `http://${hostname}:8000/api`;
+};
+
+const API_BASE = getApiBase();
 
 export interface Index {
   id: number;
@@ -31,10 +41,12 @@ export interface Source {
   name: string | null;
   crawl_depth: number;
   crawl_frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
+  crawl_mode: 'text_only' | 'images_only' | 'videos_only' | 'text_images' | 'text_videos' | 'images_videos' | 'all' | 'both';
   max_pages: number;
   include_patterns: string[];
   exclude_patterns: string[];
   respect_robots: boolean;
+  use_tor: boolean;
   is_active: boolean;
   last_crawl_at: string | null;
   page_count: number;
@@ -71,6 +83,52 @@ export interface SearchResponse {
   };
 }
 
+export interface ImageSearchResult {
+  image_url: string;
+  image_alt: string;
+  page_url: string;
+  page_title: string;
+  domain: string;
+  score: number;
+}
+
+export interface ImageSearchResponse {
+  query: string;
+  total_results: number;
+  page: number;
+  per_page: number;
+  results: ImageSearchResult[];
+  timing_ms: number;
+}
+
+export interface ImageSearchStatus {
+  enabled: boolean;
+  model_loaded: boolean;
+  model_name: string;
+  embedding_dimensions: number;
+}
+
+export interface VideoSearchResult {
+  video_url: string;
+  thumbnail_url: string;
+  embed_type: 'direct' | 'youtube' | 'vimeo' | 'page_link';
+  video_id: string | null;
+  video_title: string;
+  page_url: string;
+  page_title: string;
+  domain: string;
+  score: number;
+}
+
+export interface VideoSearchResponse {
+  query: string;
+  total_results: number;
+  page: number;
+  per_page: number;
+  results: VideoSearchResult[];
+  timing_ms: number;
+}
+
 export interface CrawlJob {
   id: number;
   source_id: number;
@@ -83,6 +141,48 @@ export interface CrawlJob {
   started_at: string | null;
   completed_at: string | null;
   error_message: string | null;
+  is_active?: boolean;
+}
+
+export interface CollectionItem {
+  id: number;
+  item_type: 'image' | 'video';
+  url: string;
+  thumbnail_url: string | null;
+  title: string | null;
+  source_url: string | null;
+  domain: string | null;
+  embed_type: string | null;
+  video_id: string | null;
+  sort_order: number;
+  added_at: string;
+}
+
+export interface Collection {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  cover_url: string | null;
+  sort_order: number;
+  item_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollectionWithItems extends Collection {
+  items: CollectionItem[];
+}
+
+export interface CollectionItemCreate {
+  item_type: 'image' | 'video';
+  url: string;
+  thumbnail_url?: string | null;
+  title?: string | null;
+  source_url?: string | null;
+  domain?: string | null;
+  embed_type?: string | null;
+  video_id?: string | null;
 }
 
 class ApiClient {
@@ -178,10 +278,12 @@ class ApiClient {
       name?: string;
       crawl_depth?: number;
       crawl_frequency?: 'hourly' | 'daily' | 'weekly' | 'monthly';
+      crawl_mode?: 'text_only' | 'images_only' | 'both';
       max_pages?: number;
       include_patterns?: string[];
       exclude_patterns?: string[];
       respect_robots?: boolean;
+      use_tor?: boolean;
     }
   ): Promise<Source> {
     return this.request(`/sources/by-index/${indexId}`, {
@@ -214,6 +316,36 @@ class ApiClient {
     per_page?: number;
   }): Promise<SearchResponse> {
     return this.request('/search', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  // Image Search
+  async searchImages(params: {
+    query: string;
+    indexes?: string[];
+    page?: number;
+    per_page?: number;
+  }): Promise<ImageSearchResponse> {
+    return this.request('/search/images', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async getImageSearchStatus(): Promise<ImageSearchStatus> {
+    return this.request('/search/images/status');
+  }
+
+  // Video Search
+  async searchVideos(params: {
+    query: string;
+    indexes?: string[];
+    page?: number;
+    per_page?: number;
+  }): Promise<VideoSearchResponse> {
+    return this.request('/search/videos', {
       method: 'POST',
       body: JSON.stringify(params),
     });
@@ -265,6 +397,88 @@ class ApiClient {
   // Settings
   async getSettings(): Promise<Record<string, unknown>> {
     return this.request('/settings');
+  }
+
+  // Collections
+  async listCollections(): Promise<{ items: Collection[]; total: number }> {
+    return this.request('/collections');
+  }
+
+  async createCollection(data: {
+    name: string;
+    description?: string;
+  }): Promise<Collection> {
+    return this.request('/collections', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getCollection(id: number): Promise<CollectionWithItems> {
+    return this.request(`/collections/${id}`);
+  }
+
+  async updateCollection(
+    id: number,
+    data: Partial<{
+      name: string;
+      description: string;
+      sort_order: number;
+    }>
+  ): Promise<Collection> {
+    return this.request(`/collections/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteCollection(id: number): Promise<void> {
+    return this.request(`/collections/${id}`, { method: 'DELETE' });
+  }
+
+  async addItemToCollection(
+    collectionId: number,
+    data: CollectionItemCreate
+  ): Promise<CollectionItem> {
+    return this.request(`/collections/${collectionId}/items`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async removeItemFromCollection(
+    collectionId: number,
+    itemId: number
+  ): Promise<void> {
+    return this.request(`/collections/${collectionId}/items/${itemId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async reorderCollectionItems(
+    collectionId: number,
+    itemIds: number[]
+  ): Promise<void> {
+    return this.request(`/collections/${collectionId}/items/reorder`, {
+      method: 'POST',
+      body: JSON.stringify({ item_ids: itemIds }),
+    });
+  }
+
+  async quickAddToFavorites(data: CollectionItemCreate): Promise<CollectionItem> {
+    return this.request('/collections/quick-add', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async exportCollection(id: number): Promise<Blob> {
+    const url = `${this.baseUrl}/collections/export/${id}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return response.blob();
   }
 }
 

@@ -7,6 +7,7 @@ from app.models.page import Page
 from app.models.api_key import ApiKey
 from app.models.preset import SearchPreset
 from app.models.settings import AppSetting
+from app.models.collection import Collection, CollectionItem
 
 __all__ = [
     "Index",
@@ -16,4 +17,6 @@ __all__ = [
     "ApiKey",
     "SearchPreset",
     "AppSetting",
+    "Collection",
+    "CollectionItem",
 ]
