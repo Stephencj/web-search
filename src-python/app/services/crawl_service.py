@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.crawler.engine import CrawlerEngine, CrawlResult, CrawlStats
+from app.core.crawler.url_detector import is_youtube_url
+from app.core.crawler.youtube import YouTubeExtractor
 from app.core.search.meilisearch import get_meilisearch_client
 from app.models import CrawlJob, Source, Index
 
@@ -80,25 +82,34 @@ class CrawlService:
         if index_videos:
             await self.meilisearch.create_videos_index(index.slug)
 
-        # Create crawler engine
-        engine = CrawlerEngine(
-            source_url=source.url,
-            source_id=source.id,
-            crawl_depth=source.crawl_depth,
-            max_pages=source.max_pages,
-            include_patterns=source.include_patterns or [],
-            exclude_patterns=source.exclude_patterns or [],
-            respect_robots=source.respect_robots,
-            on_page_crawled=lambda result: asyncio.create_task(
-                self._handle_page_result(db, job, source, index, result)
-            )
-        )
-
-        self._active_crawls[job.id] = engine
-
         try:
-            # Run the crawl
-            stats = await engine.crawl()
+            # Route based on URL type
+            if is_youtube_url(source.url):
+                # Use YouTubeExtractor for YouTube URLs
+                stats = await self._crawl_youtube(
+                    db=db,
+                    job=job,
+                    source=source,
+                    index=index,
+                    on_progress=on_progress,
+                )
+            else:
+                # Use regular crawler for HTML pages
+                engine = CrawlerEngine(
+                    source_url=source.url,
+                    source_id=source.id,
+                    crawl_depth=source.crawl_depth,
+                    max_pages=source.max_pages,
+                    include_patterns=source.include_patterns or [],
+                    exclude_patterns=source.exclude_patterns or [],
+                    respect_robots=source.respect_robots,
+                    on_page_crawled=lambda result: asyncio.create_task(
+                        self._handle_page_result(db, job, source, index, result)
+                    )
+                )
+
+                self._active_crawls[job.id] = engine
+                stats = await engine.crawl()
 
             # Update job with final stats
             job.status = "completed"
@@ -291,6 +302,101 @@ class CrawlService:
                 domain=domain,
                 source_id=source_id,
             )
+
+    async def _crawl_youtube(
+        self,
+        db: AsyncSession,
+        job: CrawlJob,
+        source: Source,
+        index: Index,
+        on_progress: Optional[Callable[[CrawlJob], None]] = None,
+    ) -> CrawlStats:
+        """
+        Handle YouTube source with yt-dlp.
+
+        Extracts videos from YouTube channels, playlists, search results,
+        or single videos and indexes them with transcripts.
+
+        Args:
+            db: Database session
+            job: The crawl job record
+            source: The source to crawl
+            index: The index to add documents to
+            on_progress: Optional callback for progress updates
+
+        Returns:
+            Crawl statistics
+        """
+        settings = get_settings()
+
+        # Create YouTube extractor
+        extractor = YouTubeExtractor(
+            max_videos=source.max_pages or 500,
+            fetch_transcripts=settings.crawler.youtube_fetch_transcripts,
+            transcript_languages=settings.crawler.youtube_transcript_languages,
+            rate_limit_delay=settings.crawler.youtube_rate_limit_delay_ms / 1000.0,
+        )
+
+        videos_indexed = 0
+        videos_failed = 0
+        videos_with_transcript = 0
+
+        logger.info(f"Starting YouTube crawl for {source.url}")
+
+        async for video in extractor.extract(source.url):
+            try:
+                # Generate document ID from video URL
+                doc_id = hashlib.sha256(video.video_url.encode()).hexdigest()[:16]
+
+                # Index YouTube video with extended metadata
+                success = await self.meilisearch.index_youtube_video(
+                    slug=index.slug,
+                    doc_id=doc_id,
+                    video_url=video.video_url,
+                    video_id=video.video_id,
+                    title=video.title,
+                    source_id=source.id,
+                    thumbnail_url=video.thumbnail_url,
+                    description=video.description,
+                    transcript=video.transcript,
+                    duration_seconds=video.duration_seconds,
+                    view_count=video.view_count,
+                    upload_date=video.upload_date,
+                    channel_name=video.channel_name,
+                    channel_id=video.channel_id,
+                    tags=video.tags,
+                )
+
+                if success:
+                    videos_indexed += 1
+                    if video.transcript:
+                        videos_with_transcript += 1
+                else:
+                    videos_failed += 1
+
+                # Update job progress periodically
+                if videos_indexed % 10 == 0:
+                    job.pages_crawled = videos_indexed + videos_failed
+                    job.pages_indexed = videos_indexed
+                    await db.commit()
+                    if on_progress:
+                        on_progress(job)
+
+            except Exception as e:
+                logger.warning(f"Failed to index YouTube video {video.video_id}: {e}")
+                videos_failed += 1
+
+        logger.info(
+            f"YouTube crawl completed: {videos_indexed} indexed, "
+            f"{videos_with_transcript} with transcripts, {videos_failed} failed"
+        )
+
+        return CrawlStats(
+            pages_crawled=videos_indexed + videos_failed,
+            pages_indexed=videos_indexed,
+            pages_skipped=0,
+            pages_failed=videos_failed,
+        )
 
     def _extract_domain(self, url: str) -> str:
         """Extract domain from URL."""

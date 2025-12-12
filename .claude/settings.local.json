@@ -14,7 +14,21 @@
       "Bash(\"C:\\Users\\steph\\documents\\web-search\\meilisearch.exe\" --db-path \"C:\\Users\\steph\\documents\\web-search\\data\\meilisearch\" --http-addr 127.0.0.1:7700)",
       "Bash(timeout:*)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(cd:*)",
+      "Bash(git remote add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(docker:*)",
+      "Bash(ipconfig:*)",
+      "Bash(findstr:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(python:*)",
+      "Bash(npm run check:*)",
+      "Bash(git reset:*)"
     ]
   }
 }

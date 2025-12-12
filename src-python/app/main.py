@@ -26,9 +26,17 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("Database initialized")
 
+    # Start sync scheduler
+    from app.services.sync_scheduler import get_sync_scheduler
+    scheduler = get_sync_scheduler()
+    await scheduler.start()
+
     yield
 
-    # Cleanup
+    # Shutdown scheduler
+    await scheduler.shutdown()
+
+    # Cleanup database
     await close_db()
     logger.info("Shutdown complete")
 

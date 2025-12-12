@@ -12,6 +12,8 @@
 
   const navItems: NavItem[] = [
     { href: '/', label: 'Search', icon: '🔍' },
+    { href: '/feed', label: 'Feed', icon: '📺' },
+    { href: '/subscriptions', label: 'Subscriptions', icon: '🔔' },
     { href: '/collections', label: 'Collections', icon: '📁' },
     { href: '/indexes', label: 'Indexes', icon: '📚' },
     { href: '/crawl', label: 'Crawl Status', icon: '🔄' },
