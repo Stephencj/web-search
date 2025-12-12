@@ -70,3 +70,74 @@ class SearchResponse(BaseModel):
     results: list[SearchResult]
     facets: dict[str, list[SearchFacet]] = Field(default_factory=dict)
     timing: SearchTiming = Field(default_factory=SearchTiming)
+
+
+# ==================== IMAGE SEARCH SCHEMAS ====================
+
+class ImageSearchRequest(BaseModel):
+    """Schema for image search request."""
+    query: str = Field(..., min_length=1, max_length=500)
+    indexes: Optional[list[str]] = None
+    page: int = Field(default=1, ge=1)
+    per_page: int = Field(default=50, ge=1, le=200)
+
+
+class ImageSearchResult(BaseModel):
+    """Single image search result."""
+    image_url: str
+    image_alt: Optional[str] = None
+    page_url: str
+    page_title: str
+    domain: str
+    score: float = Field(default=0.8, ge=0, le=1)
+
+
+class ImageSearchResponse(BaseModel):
+    """Schema for image search response."""
+    query: str
+    total_results: int
+    page: int
+    per_page: int
+    results: list[ImageSearchResult]
+    timing_ms: int
+
+
+class ImageSearchStatus(BaseModel):
+    """Status of image search capabilities."""
+    enabled: bool
+    model_loaded: bool
+    model_name: str
+    embedding_dimensions: int
+
+
+# ==================== VIDEO SEARCH SCHEMAS ====================
+
+class VideoSearchRequest(BaseModel):
+    """Schema for video search request."""
+    query: str = Field(..., min_length=1, max_length=500)
+    indexes: Optional[list[str]] = None
+    page: int = Field(default=1, ge=1)
+    per_page: int = Field(default=50, ge=1, le=200)
+
+
+class VideoSearchResult(BaseModel):
+    """Single video search result."""
+    video_url: str
+    thumbnail_url: Optional[str] = None
+    embed_type: str
+    video_id: Optional[str] = None
+    video_title: Optional[str] = None
+    page_url: str
+    page_title: str
+    domain: str
+    score: float = Field(default=0.8, ge=0, le=1)
+
+
+class VideoSearchResponse(BaseModel):
+    """Schema for video search response."""
+    query: str
+    total_results: int
+    page: int
+    per_page: int
+    results: list[VideoSearchResult]
+    timing_ms: int

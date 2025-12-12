@@ -32,6 +32,7 @@ class CrawlResult:
     headings: list[str] = field(default_factory=list)
     links: list[str] = field(default_factory=list)
     images: list[dict] = field(default_factory=list)  # List of image info dicts
+    videos: list[dict] = field(default_factory=list)  # List of video info dicts
     content_hash: Optional[str] = None
     word_count: int = 0
     published_date: Optional[str] = None
@@ -287,6 +288,18 @@ class CrawlerEngine:
             for img in extracted.images
         ]
 
+        # Convert videos to dicts
+        videos = [
+            {
+                "video_url": vid.video_url,
+                "thumbnail_url": vid.thumbnail_url,
+                "embed_type": vid.embed_type,
+                "video_id": vid.video_id,
+                "title": vid.title,
+            }
+            for vid in extracted.videos
+        ]
+
         result = CrawlResult(
             url=url,
             status_code=200,
@@ -296,6 +309,7 @@ class CrawlerEngine:
             headings=extracted.headings,
             links=links,
             images=images,
+            videos=videos,
             content_hash=content_hash,
             word_count=extracted.word_count,
             published_date=extracted.published_date,

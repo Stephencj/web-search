@@ -279,6 +279,322 @@ class MeilisearchClient:
         except (ValueError, AttributeError):
             return None
 
+    # ==================== IMAGE INDEX METHODS ====================
+
+    def get_images_index_name(self, slug: str) -> str:
+        """Get full images index name with prefix."""
+        return f"{self.index_prefix}{slug}_images"
+
+    async def create_images_index(self, slug: str) -> bool:
+        """Create a dedicated images Meilisearch index."""
+        client = await self.get_client()
+        index_name = self.get_images_index_name(slug)
+
+        try:
+            await client.create_index(index_name, primary_key="id")
+            index = client.index(index_name)
+
+            settings = MeiliSettings(
+                searchable_attributes=[
+                    "alt",
+                    "title",
+                    "page_title",
+                ],
+                filterable_attributes=[
+                    "domain",
+                    "source_id",
+                    "page_url",
+                    "indexed_at",
+                ],
+                sortable_attributes=[
+                    "indexed_at",
+                ],
+            )
+            await index.update_settings(settings)
+
+            logger.info(f"Created images index: {index_name}")
+            return True
+
+        except MeilisearchApiError as e:
+            if "already exists" in str(e).lower():
+                logger.debug(f"Images index {index_name} already exists")
+                return True
+            logger.error(f"Failed to create images index {index_name}: {e}")
+            return False
+
+    async def delete_images_index(self, slug: str) -> bool:
+        """Delete an images Meilisearch index."""
+        client = await self.get_client()
+        index_name = self.get_images_index_name(slug)
+
+        try:
+            await client.delete_index(index_name)
+            logger.info(f"Deleted images index: {index_name}")
+            return True
+        except MeilisearchApiError as e:
+            logger.error(f"Failed to delete images index {index_name}: {e}")
+            return False
+
+    async def index_image(
+        self,
+        slug: str,
+        doc_id: str,
+        image_url: str,
+        alt: Optional[str],
+        title: Optional[str],
+        page_url: str,
+        page_title: str,
+        domain: str,
+        source_id: int,
+        embedding: Optional[list[float]] = None,
+    ) -> bool:
+        """Index a single image document."""
+        client = await self.get_client()
+        index_name = self.get_images_index_name(slug)
+
+        document = {
+            "id": doc_id,
+            "image_url": image_url,
+            "alt": alt or "",
+            "title": title or "",
+            "page_url": page_url,
+            "page_title": page_title or "",
+            "domain": domain,
+            "source_id": source_id,
+            "indexed_at": int(datetime.utcnow().timestamp()),
+        }
+
+        if embedding:
+            document["_vectors"] = {"image": embedding}
+
+        try:
+            index = client.index(index_name)
+            await index.add_documents([document])
+            return True
+        except MeilisearchApiError as e:
+            logger.error(f"Failed to index image {image_url}: {e}")
+            return False
+
+    async def search_images(
+        self,
+        slug: str,
+        query: str,
+        vector: Optional[list[float]] = None,
+        filters: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Search images index with optional vector similarity."""
+        client = await self.get_client()
+        index_name = self.get_images_index_name(slug)
+
+        try:
+            index = client.index(index_name)
+
+            search_kwargs = {
+                "filter": filters,
+                "offset": offset,
+                "limit": limit,
+            }
+
+            if vector:
+                # Vector search using CLIP embeddings
+                search_kwargs["vector"] = vector
+                search_kwargs["hybrid"] = {"embedder": "image", "semanticRatio": 0.7}
+
+            result = await index.search(query, **search_kwargs)
+
+            return {
+                "hits": result.hits,
+                "total": result.estimated_total_hits or len(result.hits),
+                "processing_time_ms": result.processing_time_ms,
+            }
+        except MeilisearchApiError as e:
+            logger.error(f"Image search failed: {e}")
+            return {"hits": [], "total": 0, "processing_time_ms": 0}
+
+    async def delete_images_by_source(self, slug: str, source_id: int) -> bool:
+        """Delete all images from a source."""
+        client = await self.get_client()
+        index_name = self.get_images_index_name(slug)
+
+        try:
+            index = client.index(index_name)
+            await index.delete_documents_by_filter(f"source_id = {source_id}")
+            return True
+        except MeilisearchApiError as e:
+            logger.error(f"Failed to delete images for source {source_id}: {e}")
+            return False
+
+    # ==================== VIDEO INDEX METHODS ====================
+
+    def get_videos_index_name(self, slug: str) -> str:
+        """Get full videos index name with prefix."""
+        return f"{self.index_prefix}{slug}_videos"
+
+    async def create_videos_index(self, slug: str) -> bool:
+        """Create a dedicated videos Meilisearch index."""
+        client = await self.get_client()
+        index_name = self.get_videos_index_name(slug)
+
+        try:
+            await client.create_index(index_name, primary_key="id")
+            index = client.index(index_name)
+
+            settings = MeiliSettings(
+                searchable_attributes=[
+                    "video_title",
+                    "page_title",
+                ],
+                filterable_attributes=[
+                    "domain",
+                    "source_id",
+                    "embed_type",
+                    "page_url",
+                    "indexed_at",
+                ],
+                sortable_attributes=[
+                    "indexed_at",
+                ],
+            )
+            await index.update_settings(settings)
+
+            logger.info(f"Created videos index: {index_name}")
+            return True
+
+        except MeilisearchApiError as e:
+            if "already exists" in str(e).lower():
+                logger.debug(f"Videos index {index_name} already exists")
+                return True
+            logger.error(f"Failed to create videos index {index_name}: {e}")
+            return False
+
+    async def delete_videos_index(self, slug: str) -> bool:
+        """Delete a videos Meilisearch index."""
+        client = await self.get_client()
+        index_name = self.get_videos_index_name(slug)
+
+        try:
+            await client.delete_index(index_name)
+            logger.info(f"Deleted videos index: {index_name}")
+            return True
+        except MeilisearchApiError as e:
+            logger.error(f"Failed to delete videos index {index_name}: {e}")
+            return False
+
+    async def index_video(
+        self,
+        slug: str,
+        doc_id: str,
+        video_url: str,
+        thumbnail_url: Optional[str],
+        embed_type: str,
+        video_id: Optional[str],
+        video_title: Optional[str],
+        page_url: str,
+        page_title: str,
+        domain: str,
+        source_id: int,
+    ) -> bool:
+        """Index a single video document."""
+        client = await self.get_client()
+        index_name = self.get_videos_index_name(slug)
+
+        document = {
+            "id": doc_id,
+            "video_url": video_url,
+            "thumbnail_url": thumbnail_url,
+            "embed_type": embed_type,
+            "video_id": video_id,
+            "video_title": video_title or "",
+            "page_url": page_url,
+            "page_title": page_title or "",
+            "domain": domain,
+            "source_id": source_id,
+            "indexed_at": int(datetime.utcnow().timestamp()),
+        }
+
+        try:
+            index = client.index(index_name)
+            await index.add_documents([document])
+            return True
+        except MeilisearchApiError as e:
+            logger.error(f"Failed to index video {video_url}: {e}")
+            return False
+
+    async def search_videos(
+        self,
+        slug: str,
+        query: str,
+        filters: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Search videos index."""
+        client = await self.get_client()
+        index_name = self.get_videos_index_name(slug)
+
+        try:
+            index = client.index(index_name)
+            result = await index.search(
+                query,
+                filter=filters,
+                offset=offset,
+                limit=limit,
+            )
+
+            return {
+                "hits": result.hits,
+                "total": result.estimated_total_hits or len(result.hits),
+                "processing_time_ms": result.processing_time_ms,
+            }
+        except MeilisearchApiError as e:
+            logger.error(f"Video search failed: {e}")
+            return {"hits": [], "total": 0, "processing_time_ms": 0}
+
+    async def delete_videos_by_source(self, slug: str, source_id: int) -> bool:
+        """Delete all videos from a source."""
+        client = await self.get_client()
+        index_name = self.get_videos_index_name(slug)
+
+        try:
+            index = client.index(index_name)
+            await index.delete_documents_by_filter(f"source_id = {source_id}")
+            return True
+        except MeilisearchApiError as e:
+            logger.error(f"Failed to delete videos for source {source_id}: {e}")
+            return False
+
+    async def get_images_stats(self, slug: str) -> dict[str, Any]:
+        """Get images index statistics."""
+        client = await self.get_client()
+        index_name = self.get_images_index_name(slug)
+
+        try:
+            index = client.index(index_name)
+            stats = await index.get_stats()
+            return {
+                "document_count": stats.number_of_documents,
+                "is_indexing": stats.is_indexing,
+            }
+        except MeilisearchApiError:
+            return {"document_count": 0, "is_indexing": False}
+
+    async def get_videos_stats(self, slug: str) -> dict[str, Any]:
+        """Get videos index statistics."""
+        client = await self.get_client()
+        index_name = self.get_videos_index_name(slug)
+
+        try:
+            index = client.index(index_name)
+            stats = await index.get_stats()
+            return {
+                "document_count": stats.number_of_documents,
+                "is_indexing": stats.is_indexing,
+            }
+        except MeilisearchApiError:
+            return {"document_count": 0, "is_indexing": False}
+
 
 # Singleton instance
 _client: Optional[MeilisearchClient] = None

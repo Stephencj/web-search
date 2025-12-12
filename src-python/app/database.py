@@ -76,6 +76,32 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+        # Run migrations for new columns
+        await _run_migrations(conn)
+
+
+async def _run_migrations(conn) -> None:
+    """Run database migrations for schema updates."""
+    from sqlalchemy import text
+
+    # Add crawl_mode column to sources table if it doesn't exist
+    try:
+        await conn.execute(text(
+            "ALTER TABLE sources ADD COLUMN crawl_mode VARCHAR(20) DEFAULT 'all'"
+        ))
+    except Exception:
+        # Column already exists
+        pass
+
+    # Add use_tor column to sources table if it doesn't exist
+    try:
+        await conn.execute(text(
+            "ALTER TABLE sources ADD COLUMN use_tor BOOLEAN DEFAULT 0"
+        ))
+    except Exception:
+        # Column already exists
+        pass
+
 
 async def close_db() -> None:
     """Close database connections."""

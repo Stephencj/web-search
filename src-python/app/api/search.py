@@ -5,9 +5,11 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter
+from loguru import logger
 from sqlalchemy import select
 
 from app.api.deps import DbSession
+from app.config import get_settings
 from app.core.search.meilisearch import get_meilisearch_client
 from app.models import Index
 from app.schemas.search import (
@@ -16,6 +18,13 @@ from app.schemas.search import (
     SearchResult,
     SearchFacet,
     SearchTiming,
+    ImageSearchRequest,
+    ImageSearchResponse,
+    ImageSearchResult,
+    ImageSearchStatus,
+    VideoSearchRequest,
+    VideoSearchResponse,
+    VideoSearchResult,
 )
 
 router = APIRouter()
@@ -202,4 +211,172 @@ async def search(request: SearchRequest, db: DbSession) -> SearchResponse:
             external_ms=external_time_ms,
             total_ms=total_time_ms
         )
+    )
+
+
+# ==================== IMAGE SEARCH ====================
+
+@router.post("/images", response_model=ImageSearchResponse)
+async def search_images(request: ImageSearchRequest, db: DbSession) -> ImageSearchResponse:
+    """Search images using CLIP semantic search."""
+    start_time = time.time()
+    meilisearch = get_meilisearch_client()
+    settings = get_settings()
+
+    all_results: list[ImageSearchResult] = []
+    total_results = 0
+
+    # Get CLIP embedding for query text if enabled
+    query_vector = None
+    if settings.crawler.image_embeddings_enabled:
+        try:
+            from app.core.embeddings.clip_embeddings import get_clip_embeddings
+            clip = get_clip_embeddings()
+            if clip.is_available():
+                query_vector = clip.encode_text(request.query)
+        except Exception as e:
+            logger.warning(f"Failed to generate CLIP embedding for query: {e}")
+
+    # Determine indexes to search
+    if request.indexes:
+        index_slugs = request.indexes
+    else:
+        result = await db.execute(
+            select(Index.slug).where(Index.is_active == True)
+        )
+        index_slugs = [row[0] for row in result.fetchall()]
+
+    # Calculate offset
+    offset = (request.page - 1) * request.per_page
+
+    # Search each index's images
+    for slug in index_slugs:
+        try:
+            search_result = await meilisearch.search_images(
+                slug=slug,
+                query=request.query,
+                vector=query_vector,
+                offset=offset,
+                limit=request.per_page,
+            )
+
+            total_results += search_result.get("total", 0)
+
+            for hit in search_result.get("hits", []):
+                all_results.append(ImageSearchResult(
+                    image_url=hit.get("image_url", ""),
+                    image_alt=hit.get("alt"),
+                    page_url=hit.get("page_url", ""),
+                    page_title=hit.get("page_title", ""),
+                    domain=hit.get("domain", ""),
+                    score=0.8,
+                ))
+
+        except Exception as e:
+            logger.warning(f"Image search failed for index {slug}: {e}")
+
+    timing_ms = int((time.time() - start_time) * 1000)
+
+    return ImageSearchResponse(
+        query=request.query,
+        total_results=total_results,
+        page=request.page,
+        per_page=request.per_page,
+        results=all_results[:request.per_page],
+        timing_ms=timing_ms,
+    )
+
+
+@router.get("/images/status", response_model=ImageSearchStatus)
+async def get_image_search_status() -> ImageSearchStatus:
+    """Get status of image search capabilities."""
+    settings = get_settings()
+
+    if not settings.crawler.image_embeddings_enabled:
+        return ImageSearchStatus(
+            enabled=False,
+            model_loaded=False,
+            model_name="",
+            embedding_dimensions=0,
+        )
+
+    try:
+        from app.core.embeddings.clip_embeddings import get_clip_embeddings
+        clip = get_clip_embeddings()
+
+        return ImageSearchStatus(
+            enabled=True,
+            model_loaded=clip.is_available(),
+            model_name="clip-ViT-B-32",
+            embedding_dimensions=512,
+        )
+    except Exception:
+        return ImageSearchStatus(
+            enabled=True,
+            model_loaded=False,
+            model_name="clip-ViT-B-32",
+            embedding_dimensions=512,
+        )
+
+
+# ==================== VIDEO SEARCH ====================
+
+@router.post("/videos", response_model=VideoSearchResponse)
+async def search_videos(request: VideoSearchRequest, db: DbSession) -> VideoSearchResponse:
+    """Search videos."""
+    start_time = time.time()
+    meilisearch = get_meilisearch_client()
+
+    all_results: list[VideoSearchResult] = []
+    total_results = 0
+
+    # Determine indexes to search
+    if request.indexes:
+        index_slugs = request.indexes
+    else:
+        result = await db.execute(
+            select(Index.slug).where(Index.is_active == True)
+        )
+        index_slugs = [row[0] for row in result.fetchall()]
+
+    # Calculate offset
+    offset = (request.page - 1) * request.per_page
+
+    # Search each index's videos
+    for slug in index_slugs:
+        try:
+            search_result = await meilisearch.search_videos(
+                slug=slug,
+                query=request.query,
+                offset=offset,
+                limit=request.per_page,
+            )
+
+            total_results += search_result.get("total", 0)
+
+            for hit in search_result.get("hits", []):
+                all_results.append(VideoSearchResult(
+                    video_url=hit.get("video_url", ""),
+                    thumbnail_url=hit.get("thumbnail_url"),
+                    embed_type=hit.get("embed_type", "direct"),
+                    video_id=hit.get("video_id"),
+                    video_title=hit.get("video_title"),
+                    page_url=hit.get("page_url", ""),
+                    page_title=hit.get("page_title", ""),
+                    domain=hit.get("domain", ""),
+                    score=0.8,
+                ))
+
+        except Exception as e:
+            logger.warning(f"Video search failed for index {slug}: {e}")
+
+    timing_ms = int((time.time() - start_time) * 1000)
+
+    return VideoSearchResponse(
+        query=request.query,
+        total_results=total_results,
+        page=request.page,
+        per_page=request.per_page,
+        results=all_results[:request.per_page],
+        timing_ms=timing_ms,
     )

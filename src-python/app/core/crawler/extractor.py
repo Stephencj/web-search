@@ -20,6 +20,18 @@ class ImageInfo:
 
 
 @dataclass
+class VideoInfo:
+    """Information about a video on a page."""
+    video_url: str
+    thumbnail_url: Optional[str]
+    embed_type: str  # "youtube", "vimeo", "direct"
+    video_id: Optional[str]
+    title: Optional[str]
+    width: Optional[int]
+    height: Optional[int]
+
+
+@dataclass
 class ExtractedContent:
     """Extracted content from a web page."""
     title: Optional[str]
@@ -28,6 +40,7 @@ class ExtractedContent:
     headings: list[str]
     links: list[str]
     images: list[ImageInfo]
+    videos: list[VideoInfo]
     word_count: int
     published_date: Optional[str]
 
@@ -62,6 +75,9 @@ class ContentExtractor:
         # Extract images
         images = self._extract_images(soup, url)
 
+        # Extract videos
+        videos = self._extract_videos(soup, url)
+
         # Extract published date
         published_date = self._extract_date(html)
 
@@ -75,6 +91,7 @@ class ContentExtractor:
             headings=headings,
             links=links,
             images=images,
+            videos=videos,
             word_count=word_count,
             published_date=published_date,
         )
@@ -220,3 +237,87 @@ class ContentExtractor:
             return date
         except Exception:
             return None
+
+    def _extract_videos(self, soup: BeautifulSoup, base_url: str) -> list[VideoInfo]:
+        """Extract videos from the page (YouTube, Vimeo, direct files)."""
+        videos = []
+        seen_ids = set()
+
+        # 1. YouTube embeds (iframe src patterns)
+        for iframe in soup.find_all('iframe'):
+            src = iframe.get('src', '') or iframe.get('data-src', '')
+            if not src:
+                continue
+
+            # Match youtube.com/embed/VIDEO_ID or youtu.be/VIDEO_ID
+            youtube_match = re.search(r'(?:youtube\.com/embed/|youtu\.be/)([a-zA-Z0-9_-]{11})', src)
+            if youtube_match:
+                video_id = youtube_match.group(1)
+                if video_id in seen_ids:
+                    continue
+                seen_ids.add(video_id)
+                videos.append(VideoInfo(
+                    video_url=f"https://www.youtube.com/watch?v={video_id}",
+                    thumbnail_url=f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
+                    embed_type="youtube",
+                    video_id=video_id,
+                    title=iframe.get('title'),
+                    width=self._parse_dimension(iframe.get('width')),
+                    height=self._parse_dimension(iframe.get('height')),
+                ))
+                continue
+
+            # 2. Vimeo embeds
+            vimeo_match = re.search(r'player\.vimeo\.com/video/(\d+)', src)
+            if vimeo_match:
+                video_id = vimeo_match.group(1)
+                if video_id in seen_ids:
+                    continue
+                seen_ids.add(video_id)
+                videos.append(VideoInfo(
+                    video_url=f"https://vimeo.com/{video_id}",
+                    thumbnail_url=None,  # Vimeo requires API for thumbnails
+                    embed_type="vimeo",
+                    video_id=video_id,
+                    title=iframe.get('title'),
+                    width=self._parse_dimension(iframe.get('width')),
+                    height=self._parse_dimension(iframe.get('height')),
+                ))
+
+        # 3. Direct video files (<video> and <source> tags)
+        for video_tag in soup.find_all('video'):
+            src = video_tag.get('src')
+            if not src:
+                source_tag = video_tag.find('source')
+                src = source_tag.get('src') if source_tag else None
+
+            if not src:
+                continue
+
+            # Resolve relative URLs
+            absolute_src = urljoin(base_url, src)
+
+            # Only include video file extensions
+            if not re.search(r'\.(mp4|webm|ogg|mov)(\?|$)', absolute_src, re.I):
+                continue
+
+            if absolute_src in seen_ids:
+                continue
+            seen_ids.add(absolute_src)
+
+            # Get poster/thumbnail
+            poster = video_tag.get('poster')
+            if poster:
+                poster = urljoin(base_url, poster)
+
+            videos.append(VideoInfo(
+                video_url=absolute_src,
+                thumbnail_url=poster,
+                embed_type="direct",
+                video_id=None,
+                title=video_tag.get('title'),
+                width=self._parse_dimension(video_tag.get('width')),
+                height=self._parse_dimension(video_tag.get('height')),
+            ))
+
+        return videos[:30]  # Limit to 30 videos per page

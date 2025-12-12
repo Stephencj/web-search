@@ -14,6 +14,7 @@
   let newSourceName = $state('');
   let newSourceDepth = $state(2);
   let newSourceFrequency = $state<'hourly' | 'daily' | 'weekly' | 'monthly'>('daily');
+  let newSourceCrawlMode = $state<'text_only' | 'images_only' | 'videos_only' | 'text_images' | 'text_videos' | 'images_videos' | 'all'>('all');
   let newSourceMaxPages = $state(1000);
   let addingSource = $state(false);
 
@@ -59,6 +60,7 @@
         name: newSourceName.trim() || undefined,
         crawl_depth: newSourceDepth,
         crawl_frequency: newSourceFrequency,
+        crawl_mode: newSourceCrawlMode,
         max_pages: newSourceMaxPages,
       });
       sources = [...sources, source];
@@ -76,7 +78,21 @@
     newSourceName = '';
     newSourceDepth = 2;
     newSourceFrequency = 'daily';
+    newSourceCrawlMode = 'all';
     newSourceMaxPages = 1000;
+  }
+
+  function formatCrawlMode(mode: string): string {
+    const modeLabels: Record<string, string> = {
+      'all': 'All content',
+      'text_only': 'Text only',
+      'images_only': 'Images only',
+      'videos_only': 'Videos only',
+      'text_images': 'Text + Images',
+      'text_videos': 'Text + Videos',
+      'images_videos': 'Images + Videos',
+    };
+    return modeLabels[mode] || mode;
   }
 
   async function deleteSource(sourceId: number) {
@@ -199,6 +215,10 @@
 
               <div class="source-config">
                 <div class="config-item">
+                  <span class="config-label">Content Mode</span>
+                  <span class="config-value">{formatCrawlMode(source.crawl_mode || 'all')}</span>
+                </div>
+                <div class="config-item">
                   <span class="config-label">Depth</span>
                   <span class="config-value">{source.crawl_depth} levels</span>
                 </div>
@@ -279,6 +299,20 @@
             placeholder="e.g., Example Blog"
             bind:value={newSourceName}
           />
+        </div>
+
+        <div class="form-group">
+          <label for="crawlMode">Content to Index</label>
+          <select id="crawlMode" class="input" bind:value={newSourceCrawlMode}>
+            <option value="all">All (text, images, and videos)</option>
+            <option value="text_only">Text only</option>
+            <option value="images_only">Images only</option>
+            <option value="videos_only">Videos only</option>
+            <option value="text_images">Text + Images</option>
+            <option value="text_videos">Text + Videos</option>
+            <option value="images_videos">Images + Videos</option>
+          </select>
+          <span class="form-hint">What content to extract and index from pages</span>
         </div>
 
         <div class="form-row">

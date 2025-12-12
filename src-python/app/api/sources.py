@@ -25,6 +25,7 @@ def _source_to_response(source: Source) -> SourceResponse:
         include_patterns=source.include_patterns or [],
         exclude_patterns=source.exclude_patterns or [],
         respect_robots=source.respect_robots,
+        crawl_mode=source.crawl_mode,
         is_active=source.is_active,
         last_crawl_at=source.last_crawl_at,
         page_count=source.page_count,
