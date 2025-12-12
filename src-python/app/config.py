@@ -18,8 +18,8 @@ class CrawlerSettings(BaseSettings):
     max_page_size_mb: int = 10
     raw_html_enabled: bool = True
     # Image embeddings - generates CLIP vectors for semantic image search
-    # Set to False if you don't have enough RAM or don't need image search
-    image_embeddings_enabled: bool = False  # Disabled by default - requires ~2GB RAM
+    # Requires ~2GB RAM when model is loaded
+    image_embeddings_enabled: bool = True
 
 
 class MeilisearchSettings(BaseSettings):

@@ -9,9 +9,25 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.core.crawler.engine import CrawlerEngine, CrawlResult, CrawlStats
 from app.core.search.meilisearch import get_meilisearch_client
 from app.models import CrawlJob, Source, Index
+
+
+def _should_index_text(crawl_mode: str) -> bool:
+    """Check if text should be indexed based on crawl mode."""
+    return crawl_mode in ("text_only", "text_images", "text_videos", "all")
+
+
+def _should_index_images(crawl_mode: str) -> bool:
+    """Check if images should be indexed based on crawl mode."""
+    return crawl_mode in ("images_only", "text_images", "images_videos", "all")
+
+
+def _should_index_videos(crawl_mode: str) -> bool:
+    """Check if videos should be indexed based on crawl mode."""
+    return crawl_mode in ("videos_only", "text_videos", "images_videos", "all")
 
 
 class CrawlService:
@@ -50,8 +66,19 @@ class CrawlService:
         job.started_at = datetime.utcnow()
         await db.commit()
 
-        # Ensure Meilisearch index exists
-        await self.meilisearch.create_index(index.slug)
+        # Determine what to index based on crawl_mode
+        crawl_mode = getattr(source, 'crawl_mode', 'all') or 'all'
+        index_text = _should_index_text(crawl_mode)
+        index_images = _should_index_images(crawl_mode)
+        index_videos = _should_index_videos(crawl_mode)
+
+        # Ensure Meilisearch indexes exist
+        if index_text:
+            await self.meilisearch.create_index(index.slug)
+        if index_images:
+            await self.meilisearch.create_images_index(index.slug)
+        if index_videos:
+            await self.meilisearch.create_videos_index(index.slug)
 
         # Create crawler engine
         engine = CrawlerEngine(
@@ -124,6 +151,12 @@ class CrawlService:
         if not result.content:
             return
 
+        # Determine what to index based on crawl_mode
+        crawl_mode = getattr(source, 'crawl_mode', 'all') or 'all'
+        index_text = _should_index_text(crawl_mode)
+        index_images = _should_index_images(crawl_mode)
+        index_videos = _should_index_videos(crawl_mode)
+
         try:
             # Generate document ID from URL
             doc_id = hashlib.sha256(result.url.encode()).hexdigest()[:16]
@@ -134,25 +167,130 @@ class CrawlService:
             if index.ranking_config and "domain_boosts" in index.ranking_config:
                 domain_boost = index.ranking_config["domain_boosts"].get(domain, 1.0)
 
-            # Index to Meilisearch
-            await self.meilisearch.index_document(
-                slug=index.slug,
-                doc_id=doc_id,
-                url=result.url,
-                title=result.title or "Untitled",
-                description=result.description,
-                content=result.content,
-                headings=result.headings,
-                domain=domain,
-                source_id=source.id,
-                crawled_at=result.crawled_at,
-                published_at=result.published_date,
-                domain_boost=domain_boost,
-                images=result.images,
-            )
+            # Index text content to main index
+            if index_text:
+                await self.meilisearch.index_document(
+                    slug=index.slug,
+                    doc_id=doc_id,
+                    url=result.url,
+                    title=result.title or "Untitled",
+                    description=result.description,
+                    content=result.content,
+                    headings=result.headings,
+                    domain=domain,
+                    source_id=source.id,
+                    crawled_at=result.crawled_at,
+                    published_at=result.published_date,
+                    domain_boost=domain_boost,
+                    images=result.images if not index_images else [],  # Only in page doc if not using dedicated index
+                )
+
+            # Index images to dedicated images index
+            if index_images and result.images:
+                await self._index_images(
+                    index_slug=index.slug,
+                    page_url=result.url,
+                    page_title=result.title,
+                    domain=domain,
+                    source_id=source.id,
+                    images=result.images,
+                )
+
+            # Index videos to dedicated videos index
+            if index_videos and result.videos:
+                await self._index_videos(
+                    index_slug=index.slug,
+                    page_url=result.url,
+                    page_title=result.title,
+                    domain=domain,
+                    source_id=source.id,
+                    videos=result.videos,
+                )
 
         except Exception as e:
             logger.warning(f"Failed to index page {result.url}: {e}")
+
+    async def _index_images(
+        self,
+        index_slug: str,
+        page_url: str,
+        page_title: Optional[str],
+        domain: str,
+        source_id: int,
+        images: list[dict],
+    ) -> None:
+        """Index images to dedicated images index with optional CLIP embeddings."""
+        settings = get_settings()
+        clip = None
+
+        if settings.crawler.image_embeddings_enabled:
+            try:
+                from app.core.embeddings.clip_embeddings import get_clip_embeddings
+                clip = get_clip_embeddings()
+                if not clip.is_available():
+                    clip = None
+            except Exception as e:
+                logger.warning(f"Failed to load CLIP embeddings: {e}")
+                clip = None
+
+        for img in images[:20]:  # Limit per page
+            img_url = img.get("src")
+            if not img_url:
+                continue
+
+            doc_id = hashlib.sha256(img_url.encode()).hexdigest()[:16]
+
+            # Generate CLIP embedding if enabled
+            embedding = None
+            if clip:
+                try:
+                    embedding = await clip.encode_image_url(img_url)
+                except Exception as e:
+                    logger.debug(f"Failed to generate CLIP embedding for {img_url}: {e}")
+
+            await self.meilisearch.index_image(
+                slug=index_slug,
+                doc_id=doc_id,
+                image_url=img_url,
+                alt=img.get("alt"),
+                title=img.get("title"),
+                page_url=page_url,
+                page_title=page_title or "",
+                domain=domain,
+                source_id=source_id,
+                embedding=embedding,
+            )
+
+    async def _index_videos(
+        self,
+        index_slug: str,
+        page_url: str,
+        page_title: Optional[str],
+        domain: str,
+        source_id: int,
+        videos: list[dict],
+    ) -> None:
+        """Index videos to dedicated videos index."""
+        for vid in videos[:15]:  # Limit per page
+            video_url = vid.get("video_url")
+            if not video_url:
+                continue
+
+            doc_id = hashlib.sha256(video_url.encode()).hexdigest()[:16]
+
+            await self.meilisearch.index_video(
+                slug=index_slug,
+                doc_id=doc_id,
+                video_url=video_url,
+                thumbnail_url=vid.get("thumbnail_url"),
+                embed_type=vid.get("embed_type", "direct"),
+                video_id=vid.get("video_id"),
+                video_title=vid.get("title"),
+                page_url=page_url,
+                page_title=page_title or "",
+                domain=domain,
+                source_id=source_id,
+            )
 
     def _extract_domain(self, url: str) -> str:
         """Extract domain from URL."""

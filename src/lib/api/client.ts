@@ -41,7 +41,7 @@ export interface Source {
   name: string | null;
   crawl_depth: number;
   crawl_frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
-  crawl_mode: 'text_only' | 'images_only' | 'videos_only' | 'text_images' | 'text_videos' | 'images_videos' | 'all' | 'both';
+  crawl_mode: 'text_only' | 'images_only' | 'videos_only' | 'text_images' | 'text_videos' | 'images_videos' | 'all';
   max_pages: number;
   include_patterns: string[];
   exclude_patterns: string[];
@@ -278,7 +278,7 @@ class ApiClient {
       name?: string;
       crawl_depth?: number;
       crawl_frequency?: 'hourly' | 'daily' | 'weekly' | 'monthly';
-      crawl_mode?: 'text_only' | 'images_only' | 'both';
+      crawl_mode?: 'text_only' | 'images_only' | 'videos_only' | 'text_images' | 'text_videos' | 'images_videos' | 'all';
       max_pages?: number;
       include_patterns?: string[];
       exclude_patterns?: string[];

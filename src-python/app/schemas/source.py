@@ -24,6 +24,9 @@ class SourceBase(BaseModel):
     # robots.txt behavior
     respect_robots: bool = True
 
+    # Content extraction mode
+    crawl_mode: Literal["text_only", "images_only", "videos_only", "text_images", "text_videos", "images_videos", "all"] = "all"
+
 
 class SourceCreate(SourceBase):
     """Schema for creating a Source."""
@@ -41,6 +44,7 @@ class SourceUpdate(BaseModel):
     include_patterns: Optional[list[str]] = None
     exclude_patterns: Optional[list[str]] = None
     respect_robots: Optional[bool] = None
+    crawl_mode: Optional[Literal["text_only", "images_only", "videos_only", "text_images", "text_videos", "images_videos", "all"]] = None
     is_active: Optional[bool] = None
 
 
@@ -60,6 +64,7 @@ class SourceResponse(BaseModel):
     include_patterns: list[str]
     exclude_patterns: list[str]
     respect_robots: bool
+    crawl_mode: str
 
     is_active: bool
     last_crawl_at: Optional[datetime]

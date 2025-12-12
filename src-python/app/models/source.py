@@ -51,6 +51,11 @@ class Source(Base):
     # robots.txt behavior
     respect_robots: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Content extraction mode
+    crawl_mode: Mapped[str] = mapped_column(
+        String(20), default="all"  # "text_only", "images_only", "videos_only", "text_images", "text_videos", "images_videos", "all"
+    )
+
     # Status tracking
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_crawl_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
