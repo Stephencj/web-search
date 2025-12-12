@@ -8,6 +8,8 @@ from app.models.api_key import ApiKey
 from app.models.preset import SearchPreset
 from app.models.settings import AppSetting
 from app.models.collection import Collection, CollectionItem
+from app.models.channel import Channel
+from app.models.feed_item import FeedItem
 
 __all__ = [
     "Index",
@@ -19,4 +21,6 @@ __all__ = [
     "AppSetting",
     "Collection",
     "CollectionItem",
+    "Channel",
+    "FeedItem",
 ]

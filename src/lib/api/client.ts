@@ -185,6 +185,93 @@ export interface CollectionItemCreate {
   video_id?: string | null;
 }
 
+// Channel/Feed types
+export interface Channel {
+  id: number;
+  platform: 'youtube' | 'rumble';
+  platform_channel_id: string;
+  channel_url: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  subscriber_count: number | null;
+  is_active: boolean;
+  last_synced_at: string | null;
+  last_sync_error: string | null;
+  consecutive_errors: number;
+  import_source: string | null;
+  created_at: string;
+  updated_at: string;
+  display_name: string;
+  video_count: number;
+  unwatched_count: number;
+}
+
+export interface FeedItem {
+  id: number;
+  channel_id: number;
+  platform: 'youtube' | 'rumble';
+  video_id: string;
+  video_url: string;
+  title: string;
+  description: string | null;
+  thumbnail_url: string | null;
+  duration_seconds: number | null;
+  view_count: number | null;
+  upload_date: string;
+  is_watched: boolean;
+  watched_at: string | null;
+  watch_progress_seconds: number | null;
+  discovered_at: string;
+  duration_formatted: string;
+  is_recent: boolean;
+  channel_name: string;
+  channel_avatar_url: string | null;
+}
+
+export interface FeedResponse {
+  items: FeedItem[];
+  total: number;
+  page: number;
+  per_page: number;
+  has_more: boolean;
+}
+
+export interface ChannelGroupedFeed {
+  channel_id: number;
+  channel_name: string;
+  channel_avatar_url: string | null;
+  platform: string;
+  items: FeedItem[];
+  total_items: number;
+  unwatched_count: number;
+}
+
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  failed: number;
+  channels: Channel[];
+  errors: string[];
+}
+
+export interface SyncResult {
+  channel_id: number;
+  channel_name: string;
+  success: boolean;
+  new_videos: number;
+  error: string | null;
+}
+
+export interface FeedStats {
+  total_videos: number;
+  unwatched_videos: number;
+  watched_videos: number;
+  total_channels: number;
+  by_platform: Record<string, number>;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -479,6 +566,114 @@ class ApiClient {
       throw new Error(`HTTP ${response.status}`);
     }
     return response.blob();
+  }
+
+  // Channels (Video Subscriptions)
+  async listChannels(params?: {
+    platform?: 'youtube' | 'rumble';
+    is_active?: boolean;
+  }): Promise<{ items: Channel[]; total: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.platform) searchParams.set('platform', params.platform);
+    if (params?.is_active !== undefined) searchParams.set('is_active', String(params.is_active));
+    const query = searchParams.toString();
+    return this.request(`/channels${query ? `?${query}` : ''}`);
+  }
+
+  async addChannel(url: string): Promise<Channel> {
+    return this.request('/channels', {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
+  }
+
+  async getChannel(id: number): Promise<Channel> {
+    return this.request(`/channels/${id}`);
+  }
+
+  async updateChannel(
+    id: number,
+    data: Partial<{ is_active: boolean }>
+  ): Promise<Channel> {
+    return this.request(`/channels/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteChannel(id: number): Promise<void> {
+    return this.request(`/channels/${id}`, { method: 'DELETE' });
+  }
+
+  async syncChannel(id: number): Promise<SyncResult> {
+    return this.request(`/channels/${id}/sync`, { method: 'POST' });
+  }
+
+  async importChannelsFromUrls(urls: string[]): Promise<ImportResult> {
+    return this.request('/channels/import/urls', {
+      method: 'POST',
+      body: JSON.stringify({ urls }),
+    });
+  }
+
+  async importChannelsFromTakeout(subscriptions: Array<{
+    snippet: {
+      resourceId: { channelId: string };
+      title: string;
+    };
+  }>): Promise<ImportResult> {
+    return this.request('/channels/import/takeout', {
+      method: 'POST',
+      body: JSON.stringify({ subscriptions }),
+    });
+  }
+
+  // Feed (Video Feed)
+  async getFeed(params?: {
+    filter?: 'all' | 'unwatched' | 'watched';
+    platform?: 'youtube' | 'rumble';
+    channel_id?: number;
+    page?: number;
+    per_page?: number;
+  }): Promise<FeedResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.filter) searchParams.set('filter', params.filter);
+    if (params?.platform) searchParams.set('platform', params.platform);
+    if (params?.channel_id) searchParams.set('channel_ids', String(params.channel_id));
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.per_page) searchParams.set('per_page', String(params.per_page));
+    const query = searchParams.toString();
+    return this.request(`/feed${query ? `?${query}` : ''}`);
+  }
+
+  async getFeedByChannel(params?: {
+    filter?: 'all' | 'unwatched' | 'watched';
+    platform?: 'youtube' | 'rumble';
+  }): Promise<{ channels: ChannelGroupedFeed[]; total_channels: number; total_items: number }> {
+    const searchParams = new URLSearchParams();
+    if (params?.filter) searchParams.set('filter', params.filter);
+    if (params?.platform) searchParams.set('platform', params.platform);
+    const query = searchParams.toString();
+    return this.request(`/feed/by-channel${query ? `?${query}` : ''}`);
+  }
+
+  async markFeedItemWatched(id: number, progress_seconds?: number): Promise<FeedItem> {
+    return this.request(`/feed/items/${id}/watched`, {
+      method: 'PUT',
+      body: JSON.stringify({ progress_seconds }),
+    });
+  }
+
+  async markFeedItemUnwatched(id: number): Promise<FeedItem> {
+    return this.request(`/feed/items/${id}/unwatched`, { method: 'PUT' });
+  }
+
+  async syncAllFeeds(): Promise<SyncResult[]> {
+    return this.request('/feed/sync', { method: 'POST' });
+  }
+
+  async getFeedStats(): Promise<FeedStats> {
+    return this.request('/feed/stats');
   }
 }
 

@@ -21,12 +21,26 @@ class CrawlerSettings(BaseSettings):
     # Requires ~2GB RAM when model is loaded
     image_embeddings_enabled: bool = True
 
+    # YouTube/yt-dlp settings
+    youtube_fetch_transcripts: bool = True
+    youtube_transcript_languages: list[str] = ["en", "en-US", "en-GB"]
+    youtube_max_videos_per_source: int = 500
+    youtube_rate_limit_delay_ms: int = 2000
+
 
 class MeilisearchSettings(BaseSettings):
     """Meilisearch connection settings."""
     host: str = "http://127.0.0.1:7700"
     api_key: str = "TBmZdGLVexFLTf6Pl1_JZoQt1e07aBt6z-vIF4ldTF8"
     index_prefix: str = "websearch_"
+
+
+class SyncSettings(BaseSettings):
+    """Video feed sync settings."""
+    sync_enabled: bool = True
+    default_sync_frequency: str = "hourly"  # "hourly", "twice_daily", "daily"
+    max_videos_per_sync: int = 50
+    max_consecutive_errors: int = 5  # Auto-disable channel after this many failures
 
 
 class Settings(BaseSettings):
@@ -56,6 +70,7 @@ class Settings(BaseSettings):
     # Sub-settings
     crawler: CrawlerSettings = Field(default_factory=CrawlerSettings)
     meilisearch: MeilisearchSettings = Field(default_factory=MeilisearchSettings)
+    sync: SyncSettings = Field(default_factory=SyncSettings)
 
     @property
     def sqlite_url(self) -> str:

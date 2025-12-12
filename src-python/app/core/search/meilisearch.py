@@ -444,17 +444,26 @@ class MeilisearchClient:
             settings = MeiliSettings(
                 searchable_attributes=[
                     "video_title",
+                    "description",       # YouTube video description
+                    "transcript",        # Searchable transcript/captions
+                    "channel_name",      # YouTube channel name
+                    "tags",              # Video tags
                     "page_title",
                 ],
                 filterable_attributes=[
                     "domain",
                     "source_id",
                     "embed_type",
+                    "channel_id",        # Filter by channel
+                    "has_transcript",    # Filter videos with transcripts
                     "page_url",
                     "indexed_at",
                 ],
                 sortable_attributes=[
                     "indexed_at",
+                    "upload_date",       # Sort by upload date
+                    "view_count",        # Sort by popularity
+                    "duration_seconds",  # Sort by length
                 ],
             )
             await index.update_settings(settings)
@@ -520,6 +529,91 @@ class MeilisearchClient:
             return True
         except MeilisearchApiError as e:
             logger.error(f"Failed to index video {video_url}: {e}")
+            return False
+
+    async def index_youtube_video(
+        self,
+        slug: str,
+        doc_id: str,
+        video_url: str,
+        video_id: str,
+        title: str,
+        source_id: int,
+        thumbnail_url: Optional[str] = None,
+        description: Optional[str] = None,
+        transcript: Optional[str] = None,
+        duration_seconds: Optional[int] = None,
+        view_count: Optional[int] = None,
+        upload_date: Optional[str] = None,
+        channel_name: Optional[str] = None,
+        channel_id: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+    ) -> bool:
+        """
+        Index a YouTube video with extended metadata and transcript.
+
+        Args:
+            slug: Index slug
+            doc_id: Unique document ID
+            video_url: Full YouTube video URL
+            video_id: YouTube video ID
+            title: Video title
+            source_id: Source ID for filtering
+            thumbnail_url: Video thumbnail URL
+            description: Video description
+            transcript: Video transcript/captions text
+            duration_seconds: Video duration in seconds
+            view_count: Number of views
+            upload_date: Upload date in YYYYMMDD format
+            channel_name: Channel name
+            channel_id: Channel ID
+            tags: Video tags
+
+        Returns:
+            True if indexing succeeded
+        """
+        client = await self.get_client()
+        index_name = self.get_videos_index_name(slug)
+
+        # Parse upload_date to timestamp if provided (YYYYMMDD format)
+        upload_timestamp = None
+        if upload_date:
+            try:
+                from datetime import datetime as dt
+                parsed_date = dt.strptime(upload_date, "%Y%m%d")
+                upload_timestamp = int(parsed_date.timestamp())
+            except (ValueError, TypeError):
+                pass
+
+        document = {
+            "id": doc_id,
+            "video_url": video_url,
+            "video_id": video_id,
+            "video_title": title,
+            "thumbnail_url": thumbnail_url,
+            "embed_type": "youtube",
+            "description": (description or "")[:5000],  # Limit description size
+            "transcript": (transcript or "")[:100000],  # Limit transcript size
+            "has_transcript": bool(transcript),
+            "duration_seconds": duration_seconds,
+            "view_count": view_count,
+            "upload_date": upload_timestamp,
+            "channel_name": channel_name or "",
+            "channel_id": channel_id,
+            "tags": (tags or [])[:20],  # Limit tags
+            "domain": "youtube.com",
+            "page_url": video_url,
+            "page_title": title,
+            "source_id": source_id,
+            "indexed_at": int(datetime.utcnow().timestamp()),
+        }
+
+        try:
+            index = client.index(index_name)
+            await index.add_documents([document])
+            return True
+        except MeilisearchApiError as e:
+            logger.error(f"Failed to index YouTube video {video_url}: {e}")
             return False
 
     async def search_videos(

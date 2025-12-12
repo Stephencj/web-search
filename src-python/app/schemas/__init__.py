@@ -16,6 +16,25 @@ from app.schemas.search import (
     SearchResult,
     SearchResponse,
 )
+from app.schemas.channel import (
+    ChannelCreate,
+    ChannelUpdate,
+    ChannelResponse,
+    ChannelListResponse,
+    ChannelImportUrl,
+    ChannelImportTakeout,
+    ImportResult,
+    SyncResult,
+)
+from app.schemas.feed import (
+    FeedItemResponse,
+    FeedItemWithChannel,
+    FeedResponse,
+    FeedQuery,
+    ChannelGroupedFeed,
+    ChannelGroupedFeedResponse,
+    WatchStateUpdate,
+)
 
 __all__ = [
     "IndexCreate",
@@ -28,4 +47,21 @@ __all__ = [
     "SearchRequest",
     "SearchResult",
     "SearchResponse",
+    # Channel
+    "ChannelCreate",
+    "ChannelUpdate",
+    "ChannelResponse",
+    "ChannelListResponse",
+    "ChannelImportUrl",
+    "ChannelImportTakeout",
+    "ImportResult",
+    "SyncResult",
+    # Feed
+    "FeedItemResponse",
+    "FeedItemWithChannel",
+    "FeedResponse",
+    "FeedQuery",
+    "ChannelGroupedFeed",
+    "ChannelGroupedFeedResponse",
+    "WatchStateUpdate",
 ]
