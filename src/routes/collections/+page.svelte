@@ -599,21 +599,105 @@
   /* Mobile Styles */
   @media (max-width: 768px) {
     .page-header {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    .header-content h1 {
-      font-size: 1.5rem;
+      display: none; /* Hide header on mobile - using mobile header from layout */
     }
 
     .collections-grid {
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-      gap: var(--spacing-md);
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: var(--spacing-sm);
+    }
+
+    .collection-card {
+      border-radius: var(--radius-md);
+    }
+
+    /* Always show card actions on mobile (no hover) */
+    .card-actions {
+      opacity: 1;
+    }
+
+    .action-btn {
+      min-width: var(--touch-target-min);
+      min-height: var(--touch-target-min);
+      padding: 10px;
+    }
+
+    .card-content {
+      padding: var(--spacing-sm);
+    }
+
+    .card-title {
+      font-size: 1rem;
+    }
+
+    .card-description {
+      font-size: 0.8rem;
+      -webkit-line-clamp: 1;
+    }
+
+    .card-meta {
+      font-size: 0.75rem;
+    }
+
+    /* Modal improvements */
+    .modal-overlay {
+      padding: var(--spacing-sm);
+      align-items: flex-end;
     }
 
     .modal {
-      margin: var(--spacing-sm);
+      margin: 0;
+      max-height: 85vh;
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    }
+
+    .modal-header, .modal-body, .modal-footer {
+      padding: var(--spacing-md);
+    }
+
+    .input {
+      min-height: var(--touch-target-min);
+      font-size: 16px; /* Prevents iOS zoom */
+    }
+
+    .modal-footer .btn {
+      flex: 1;
+      min-height: var(--touch-target-min);
+    }
+
+    .close-btn {
+      min-width: var(--touch-target-min);
+      min-height: var(--touch-target-min);
+    }
+
+    /* Empty state */
+    .empty-state {
+      padding: var(--spacing-lg);
+    }
+
+    .empty-state .btn {
+      width: 100%;
+      min-height: var(--touch-target-min);
+    }
+  }
+
+  /* Small phones */
+  @media (max-width: 480px) {
+    .collections-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--spacing-xs);
+    }
+
+    .card-thumbnail {
+      aspect-ratio: 1;
+    }
+
+    .card-title {
+      font-size: 0.9rem;
+    }
+
+    .card-description {
+      display: none;
     }
   }
 </style>
