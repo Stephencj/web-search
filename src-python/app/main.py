@@ -1,9 +1,13 @@
 """WebSearch API - Personal Search Engine Backend."""
 
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from loguru import logger
 
 from app.api import api_router
@@ -61,6 +65,35 @@ def create_app() -> FastAPI:
 
     # Include API routes
     app.include_router(api_router, prefix="/api")
+
+    # Serve static frontend files in Docker/production mode
+    static_dir = Path(__file__).parent.parent / "static"
+    if static_dir.exists():
+        logger.info(f"Serving static files from: {static_dir}")
+
+        # Mount static assets (JS, CSS, etc.)
+        app.mount("/_app", StaticFiles(directory=static_dir / "_app"), name="svelte_app")
+
+        # Serve favicon and other static files
+        if (static_dir / "favicon.png").exists():
+            @app.get("/favicon.png")
+            async def favicon():
+                return FileResponse(static_dir / "favicon.png")
+
+        # SPA fallback - serve index.html for all non-API routes
+        @app.get("/{full_path:path}")
+        async def serve_spa(request: Request, full_path: str):
+            # Don't intercept API routes
+            if full_path.startswith("api/") or full_path.startswith("docs") or full_path.startswith("redoc"):
+                return
+
+            # Check if file exists in static dir
+            file_path = static_dir / full_path
+            if file_path.exists() and file_path.is_file():
+                return FileResponse(file_path)
+
+            # Fallback to index.html for SPA routing
+            return FileResponse(static_dir / "index.html")
 
     return app
 

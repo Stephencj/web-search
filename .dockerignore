@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+.svelte-kit/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Tauri (not needed for Docker)
+src-tauri/target/
+src-tauri/icons/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Build artifacts
+*.log
+*.tmp
+
+# Local data
+data/
+*.db
+*.sqlite
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Documentation
+*.md
+!README.md
+
+# Claude settings
+.claude/
+
+# Misc
+nul

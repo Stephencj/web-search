@@ -1,0 +1,45 @@
+services:
+  # Meilisearch - Full-text search engine
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: websearch-meilisearch
+    environment:
+      - MEILI_MASTER_KEY=TBmZdGLVexFLTf6Pl1_JZoQt1e07aBt6z-vIF4ldTF8
+      - MEILI_ENV=production
+    volumes:
+      - meilisearch-data:/meili_data
+    ports:
+      - "7700:7700"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # WebSearch - Backend + Frontend
+  websearch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: websearch-app
+    environment:
+      - WEBSEARCH_HOST=0.0.0.0
+      - WEBSEARCH_PORT=8000
+      - WEBSEARCH_DATA_DIR=/data
+      - WEBSEARCH_DEBUG=false
+      - WEBSEARCH_MEILISEARCH__HOST=http://meilisearch:7700
+      - WEBSEARCH_MEILISEARCH__API_KEY=TBmZdGLVexFLTf6Pl1_JZoQt1e07aBt6z-vIF4ldTF8
+    volumes:
+      - websearch-data:/data
+    ports:
+      - "8000:8000"
+    depends_on:
+      meilisearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  meilisearch-data:
+  websearch-data:
