@@ -27,6 +27,7 @@
   /* Layout */
   --sidebar-width: 220px;
   --header-height: 56px;
+  --mobile-header-height: 56px;
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -37,6 +38,14 @@
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
+
+  /* Touch targets - minimum 44px for accessibility */
+  --touch-target-min: 44px;
+
+  /* Breakpoints (for reference in JS) */
+  --breakpoint-sm: 480px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -158,4 +167,53 @@ input, textarea, select {
 .input-lg {
   padding: var(--spacing-md) var(--spacing-lg);
   font-size: 1.1rem;
+}
+
+/* Mobile-first touch-friendly buttons */
+@media (max-width: 768px) {
+  .btn {
+    min-height: var(--touch-target-min);
+    padding: var(--spacing-sm) var(--spacing-lg);
+  }
+
+  .input, .input-lg {
+    min-height: var(--touch-target-min);
+    font-size: 16px; /* Prevents iOS zoom on focus */
+  }
+}
+
+/* Hide on mobile */
+@media (max-width: 768px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+/* Hide on desktop */
+@media (min-width: 769px) {
+  .hide-desktop {
+    display: none !important;
+  }
+}
+
+/* Mobile overlay backdrop */
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 998;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.mobile-overlay.active {
+  display: block;
+  opacity: 1;
+}
+
+@media (min-width: 769px) {
+  .mobile-overlay {
+    display: none !important;
+  }
 }

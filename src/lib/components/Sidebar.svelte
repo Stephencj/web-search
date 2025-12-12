@@ -7,8 +7,12 @@
     icon: string;
   }
 
+  // Props for controlling sidebar state from parent
+  let { isOpen = $bindable(false), onClose = () => {} } = $props();
+
   const navItems: NavItem[] = [
     { href: '/', label: 'Search', icon: '🔍' },
+    { href: '/collections', label: 'Collections', icon: '📁' },
     { href: '/indexes', label: 'Indexes', icon: '📚' },
     { href: '/crawl', label: 'Crawl Status', icon: '🔄' },
     { href: '/settings', label: 'Settings', icon: '⚙️' },
@@ -18,12 +22,22 @@
     if (href === '/') return currentPath === '/';
     return currentPath.startsWith(href);
   }
+
+  function handleNavClick() {
+    // Close sidebar on mobile when navigating
+    if (window.innerWidth <= 768) {
+      onClose();
+    }
+  }
 </script>
 
-<aside class="sidebar">
+<aside class="sidebar" class:open={isOpen}>
   <div class="sidebar-header">
     <h1 class="logo">WebSearch</h1>
     <span class="version">v0.1.0</span>
+    <button class="close-btn hide-desktop" onclick={onClose} aria-label="Close menu">
+      ✕
+    </button>
   </div>
 
   <nav class="nav">
@@ -32,6 +46,7 @@
         href={item.href}
         class="nav-item"
         class:active={isActive(item.href, $page.url.pathname)}
+        onclick={handleNavClick}
       >
         <span class="nav-icon">{item.icon}</span>
         <span class="nav-label">{item.label}</span>
@@ -58,11 +73,17 @@
     position: fixed;
     left: 0;
     top: 0;
+    z-index: 999;
+    transition: transform 0.3s ease;
   }
 
   .sidebar-header {
     padding: var(--spacing-lg);
     border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
   }
 
   .logo {
@@ -77,12 +98,33 @@
     color: var(--color-text-secondary);
   }
 
+  .close-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    color: var(--color-text-secondary);
+    padding: var(--spacing-sm);
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+  }
+
+  .close-btn:hover {
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
   .nav {
     flex: 1;
     padding: var(--spacing-md);
     display: flex;
     flex-direction: column;
     gap: var(--spacing-xs);
+    overflow-y: auto;
   }
 
   .nav-item {
@@ -94,6 +136,7 @@
     color: var(--color-text);
     text-decoration: none;
     transition: all 0.2s ease;
+    min-height: var(--touch-target-min);
   }
 
   .nav-item:hover {
@@ -107,11 +150,12 @@
   }
 
   .nav-icon {
-    font-size: 1.1rem;
+    font-size: 1.25rem;
   }
 
   .nav-label {
     font-weight: 500;
+    font-size: 1rem;
   }
 
   .sidebar-footer {
@@ -135,5 +179,27 @@
   .status-text {
     font-size: 0.75rem;
     color: var(--color-text-secondary);
+  }
+
+  /* Mobile styles */
+  @media (max-width: 768px) {
+    .sidebar {
+      transform: translateX(-100%);
+      width: 280px;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .sidebar.open {
+      transform: translateX(0);
+    }
+
+    .nav-item {
+      padding: var(--spacing-md);
+      font-size: 1.1rem;
+    }
+
+    .nav-icon {
+      font-size: 1.5rem;
+    }
   }
 </style>
