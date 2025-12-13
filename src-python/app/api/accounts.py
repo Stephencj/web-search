@@ -56,6 +56,14 @@ class OAuthConfigStatus(BaseModel):
     youtube: bool = False
 
 
+class ImportSubscriptionsResponse(BaseModel):
+    """Response for subscription import."""
+    imported: int
+    skipped: int
+    failed: int
+    total_found: int
+
+
 @router.get("", response_model=list[AccountResponse])
 async def list_accounts(db: DbSession) -> list[AccountResponse]:
     """
@@ -117,12 +125,8 @@ async def oauth_callback(
 
     This is called by the OAuth provider after user authorization.
     Exchanges the authorization code for tokens and stores them.
-    Automatically imports subscriptions for YouTube accounts.
     Redirects to frontend with success/error status.
     """
-    from loguru import logger
-    import asyncio
-
     # Base redirect URL (frontend settings page)
     base_redirect = "/settings"
 
@@ -142,26 +146,60 @@ async def oauth_callback(
             status_code=status.HTTP_302_FOUND,
         )
 
-    # Auto-import subscriptions for YouTube accounts (run in background)
-    import_result = None
-    if platform == "youtube":
-        try:
-            logger.info(f"Starting auto-import of YouTube subscriptions for {account.account_email}")
-            import_result = await service.import_youtube_subscriptions(db, account)
-            logger.info(f"Auto-import complete: {import_result}")
-        except Exception as e:
-            logger.error(f"Auto-import failed: {e}")
-            # Don't fail the login if import fails
-
-    # Success - redirect with account info and import stats
-    redirect_url = f"{base_redirect}?oauth_success=true&platform={platform}&email={account.account_email}"
-    if import_result:
-        redirect_url += f"&imported={import_result.get('imported', 0)}&skipped={import_result.get('skipped', 0)}"
-
+    # Success - redirect with account info
     return RedirectResponse(
-        url=redirect_url,
+        url=f"{base_redirect}?oauth_success=true&platform={platform}&email={account.account_email}",
         status_code=status.HTTP_302_FOUND,
     )
+
+
+@router.post("/{account_id}/import-subscriptions", response_model=ImportSubscriptionsResponse)
+async def import_subscriptions(account_id: int, db: DbSession) -> ImportSubscriptionsResponse:
+    """
+    Import YouTube subscriptions from a linked account.
+
+    Fetches all subscriptions from the YouTube API and imports them as channels.
+    Existing channels are skipped (duplicates handled automatically).
+    """
+    from loguru import logger
+    from sqlalchemy import select
+    from app.models import PlatformAccount
+
+    result = await db.execute(
+        select(PlatformAccount).where(PlatformAccount.id == account_id)
+    )
+    account = result.scalar_one_or_none()
+
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Account with id {account_id} not found",
+        )
+
+    if account.platform != "youtube":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Import subscriptions is only supported for YouTube accounts",
+        )
+
+    service = get_oauth_service()
+
+    try:
+        logger.info(f"Starting subscription import for {account.account_email}")
+        import_result = await service.import_youtube_subscriptions(db, account)
+        logger.info(f"Import complete: {import_result}")
+        return ImportSubscriptionsResponse(
+            imported=import_result.get("imported", 0),
+            skipped=import_result.get("skipped", 0),
+            failed=import_result.get("failed", 0),
+            total_found=import_result.get("total_found", 0),
+        )
+    except Exception as e:
+        logger.exception(f"Subscription import failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to import subscriptions: {str(e)}",
+        )
 
 
 @router.get("/{account_id}", response_model=AccountResponse)

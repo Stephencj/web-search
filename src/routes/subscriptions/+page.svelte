@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type Channel, type ImportResult, type ChannelSearchResult } from '$lib/api/client';
+  import { api, type Channel, type ImportResult, type ChannelSearchResult, type PlatformAccount, type ImportSubscriptionsResult } from '$lib/api/client';
 
   let channels = $state<Channel[]>([]);
   let loading = $state(true);
@@ -36,6 +36,12 @@
 
   // Filters
   let platformFilter = $state<'all' | 'youtube' | 'rumble'>('all');
+
+  // YouTube account import
+  let youtubeAccounts = $state<PlatformAccount[]>([]);
+  let loadingAccounts = $state(false);
+  let importingFromAccount = $state(false);
+  let accountImportResult = $state<ImportSubscriptionsResult | null>(null);
 
   onMount(() => {
     loadChannels();
@@ -187,6 +193,50 @@
       importing = false;
     }
   }
+
+  async function loadYoutubeAccounts() {
+    loadingAccounts = true;
+    try {
+      const accounts = await api.listAccounts();
+      youtubeAccounts = accounts.filter((a) => a.platform === 'youtube' && a.is_active);
+    } catch (e) {
+      console.error('Failed to load accounts:', e);
+      youtubeAccounts = [];
+    } finally {
+      loadingAccounts = false;
+    }
+  }
+
+  async function handleImportFromAccount(accountId: number) {
+    if (importingFromAccount) return;
+
+    importingFromAccount = true;
+    accountImportResult = null;
+    try {
+      const result = await api.importSubscriptionsFromAccount(accountId);
+      accountImportResult = result;
+      if (result.imported > 0) {
+        await loadChannels();
+      }
+    } catch (e) {
+      accountImportResult = {
+        imported: 0,
+        skipped: 0,
+        failed: 1,
+        total_found: 0,
+      };
+    } finally {
+      importingFromAccount = false;
+    }
+  }
+
+  // Load accounts when import modal opens
+  $effect(() => {
+    if (showImportModal) {
+      loadYoutubeAccounts();
+      accountImportResult = null;
+    }
+  });
 
   async function handleSyncChannel(id: number) {
     syncingChannelId = id;
@@ -580,6 +630,57 @@
       </header>
       <div class="modal-body">
         <div class="import-tabs">
+          <!-- Import from Connected YouTube Account -->
+          {#if loadingAccounts}
+            <div class="import-section">
+              <h3>From YouTube Account</h3>
+              <p class="form-hint">Loading connected accounts...</p>
+            </div>
+          {:else if youtubeAccounts.length > 0}
+            <div class="import-section">
+              <h3>From YouTube Account</h3>
+              <p class="form-hint">Import all subscriptions from your connected YouTube account</p>
+              {#each youtubeAccounts as account}
+                <div class="account-import-row">
+                  <div class="account-info">
+                    <span class="account-email">{account.account_email}</span>
+                  </div>
+                  <button
+                    class="btn btn-primary"
+                    onclick={() => handleImportFromAccount(account.id)}
+                    disabled={importingFromAccount}
+                  >
+                    {importingFromAccount ? 'Importing...' : 'Import Subscriptions'}
+                  </button>
+                </div>
+              {/each}
+              {#if accountImportResult}
+                <div class="import-result" class:success={accountImportResult.imported > 0}>
+                  <p>
+                    <strong>Import complete:</strong>
+                    Found {accountImportResult.total_found} subscriptions.
+                    {accountImportResult.imported} imported, {accountImportResult.skipped} already existed, {accountImportResult.failed} failed
+                  </p>
+                </div>
+              {/if}
+            </div>
+
+            <div class="import-divider">
+              <span>OR</span>
+            </div>
+          {:else}
+            <div class="import-section">
+              <h3>From YouTube Account</h3>
+              <p class="form-hint">
+                <a href="/settings">Link your YouTube account</a> to import subscriptions directly
+              </p>
+            </div>
+
+            <div class="import-divider">
+              <span>OR</span>
+            </div>
+          {/if}
+
           <div class="import-section">
             <h3>Paste Channel URLs</h3>
             <p class="form-hint">One URL per line (YouTube or Rumble channels)</p>
@@ -1320,6 +1421,28 @@
   .no-results .hint {
     font-size: 0.85rem;
     margin-top: var(--spacing-xs);
+  }
+
+  /* Account Import Styles */
+  .account-import-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  .account-info {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+
+  .account-email {
+    font-weight: 500;
   }
 
   /* Mobile Styles */
