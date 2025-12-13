@@ -1,59 +1,96 @@
 """Settings API endpoints."""
 
-from typing import Optional
-
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import DbSession
 from app.config import get_settings
-from app.models import ApiKey, AppSetting
+from app.models import ApiKey
+from app.services.settings_service import get_settings_service
+from app.schemas.settings import (
+    ApiKeyCreate,
+    ApiKeyResponse,
+    CrawlerSettingsUpdate,
+)
 
 router = APIRouter()
-
-
-class ApiKeyCreate(BaseModel):
-    """Schema for creating an API key."""
-    provider: str
-    api_key: str
-    extra_config: Optional[str] = None
-    daily_limit: Optional[int] = None
-
-
-class ApiKeyResponse(BaseModel):
-    """Schema for API key response (masked)."""
-    provider: str
-    masked_key: str
-    is_active: bool
-    daily_limit: Optional[int]
-    daily_usage: int
-    remaining_quota: Optional[int]
+settings_service = get_settings_service()
 
 
 @router.get("")
-async def get_settings_endpoint() -> dict:
-    """Get application settings."""
+async def get_settings_endpoint(db: DbSession) -> dict:
+    """Get application settings with source information."""
     settings = get_settings()
+
+    # Get crawler settings with source info
+    crawler_settings = await settings_service.get_crawler_settings(db)
 
     return {
         "app_name": settings.app_name,
         "debug": settings.debug,
         "data_dir": str(settings.data_dir),
-        "crawler": {
-            "user_agent": settings.crawler.user_agent,
-            "concurrent_requests": settings.crawler.concurrent_requests,
-            "request_delay_ms": settings.crawler.request_delay_ms,
-            "timeout_seconds": settings.crawler.timeout_seconds,
-            "max_retries": settings.crawler.max_retries,
-            "respect_robots_txt": settings.crawler.respect_robots_txt,
-            "max_pages_per_source": settings.crawler.max_pages_per_source,
-        },
+        "crawler": crawler_settings,
         "meilisearch": {
             "host": settings.meilisearch.host,
             "index_prefix": settings.meilisearch.index_prefix,
         }
     }
+
+
+@router.get("/crawler")
+async def get_crawler_settings(db: DbSession) -> dict:
+    """Get crawler settings with source information."""
+    return await settings_service.get_crawler_settings(db)
+
+
+@router.put("/crawler")
+async def update_crawler_settings(
+    data: CrawlerSettingsUpdate,
+    db: DbSession
+) -> dict:
+    """
+    Update crawler settings.
+
+    Only settings not overridden by environment variables can be updated.
+    """
+    # Convert to dict, excluding None values
+    updates = data.model_dump(exclude_none=True)
+
+    if not updates:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No settings provided to update"
+        )
+
+    try:
+        updated_settings = await settings_service.update_crawler_settings(db, updates)
+        return {
+            "success": True,
+            "message": f"Updated {len(updates)} setting(s)",
+            "settings": updated_settings,
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.delete("/crawler/{setting_key}")
+async def reset_crawler_setting(setting_key: str, db: DbSession) -> dict:
+    """Reset a crawler setting to its default value."""
+    try:
+        updated_settings = await settings_service.reset_crawler_setting(db, setting_key)
+        return {
+            "success": True,
+            "message": f"Reset '{setting_key}' to default value",
+            "settings": updated_settings,
+        }
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @router.get("/api-keys", response_model=list[ApiKeyResponse])

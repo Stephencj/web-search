@@ -455,6 +455,73 @@ export interface PlaylistSyncResult {
   error: string | null;
 }
 
+// Settings types
+export interface SettingValue<T = unknown> {
+  value: T;
+  source: 'env' | 'db' | 'default';
+  editable: boolean;
+}
+
+export interface CrawlerSettings {
+  user_agent: SettingValue<string>;
+  concurrent_requests: SettingValue<number>;
+  request_delay_ms: SettingValue<number>;
+  timeout_seconds: SettingValue<number>;
+  max_retries: SettingValue<number>;
+  respect_robots_txt: SettingValue<boolean>;
+  max_pages_per_source: SettingValue<number>;
+  max_page_size_mb: SettingValue<number>;
+  raw_html_enabled: SettingValue<boolean>;
+  image_embeddings_enabled: SettingValue<boolean>;
+  youtube_fetch_transcripts: SettingValue<boolean>;
+  youtube_transcript_languages: SettingValue<string[]>;
+  youtube_max_videos_per_source: SettingValue<number>;
+  youtube_rate_limit_delay_ms: SettingValue<number>;
+}
+
+export interface CrawlerSettingsUpdate {
+  user_agent?: string;
+  concurrent_requests?: number;
+  request_delay_ms?: number;
+  timeout_seconds?: number;
+  max_retries?: number;
+  respect_robots_txt?: boolean;
+  max_pages_per_source?: number;
+}
+
+export interface AppSettings {
+  app_name: string;
+  debug: boolean;
+  data_dir: string;
+  crawler: CrawlerSettings;
+  meilisearch: {
+    host: string;
+    index_prefix: string;
+  };
+}
+
+export interface ApiKey {
+  provider: string;
+  masked_key: string;
+  is_active: boolean;
+  daily_limit: number | null;
+  daily_usage: number;
+  remaining_quota: number | null;
+}
+
+export interface ApiKeyCreate {
+  provider: string;
+  api_key: string;
+  extra_config?: string | null;
+  daily_limit?: number | null;
+}
+
+export interface SettingsUpdateResponse {
+  success: boolean;
+  message: string;
+  settings: CrawlerSettings;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -665,8 +732,43 @@ class ApiClient {
   }
 
   // Settings
-  async getSettings(): Promise<Record<string, unknown>> {
+  async getSettings(): Promise<AppSettings> {
     return this.request('/settings');
+  }
+
+  async getCrawlerSettings(): Promise<CrawlerSettings> {
+    return this.request('/settings/crawler');
+  }
+
+  async updateCrawlerSettings(data: CrawlerSettingsUpdate): Promise<SettingsUpdateResponse> {
+    return this.request('/settings/crawler', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async resetCrawlerSetting(key: string): Promise<SettingsUpdateResponse> {
+    return this.request(`/settings/crawler/${key}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // API Keys
+  async listApiKeys(): Promise<ApiKey[]> {
+    return this.request('/settings/api-keys');
+  }
+
+  async createApiKey(data: ApiKeyCreate): Promise<ApiKey> {
+    return this.request('/settings/api-keys', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteApiKey(provider: string): Promise<void> {
+    return this.request(`/settings/api-keys/${encodeURIComponent(provider)}`, {
+      method: 'DELETE',
+    });
   }
 
   // Collections

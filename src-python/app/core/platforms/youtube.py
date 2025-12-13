@@ -175,23 +175,14 @@ class YouTubePlatform(PlatformAdapter):
                 if len(results) >= max_results:
                     break
 
-            # Enrich with channel info
-            enriched = []
-            for result in results[:max_results]:
-                try:
-                    full_info = await self.get_channel_info(result.channel_url)
-                    if full_info:
-                        enriched.append(full_info)
-                    else:
-                        enriched.append(result)
-                except Exception:
-                    enriched.append(result)
-                await asyncio.sleep(0.5)
-
-            return enriched
+            # Return results directly without enrichment
+            # Enrichment was causing timeouts due to sequential get_channel_info() calls
+            # Channel details can be fetched lazily when user views a specific channel
+            logger.debug(f"YouTube channel search found {len(results)} channels for query: {query}")
+            return results[:max_results]
 
         except Exception as e:
-            logger.error(f"YouTube channel search failed: {e}")
+            logger.error(f"YouTube channel search failed for query '{query}': {e}")
             return []
 
     async def get_channel_videos(

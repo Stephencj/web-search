@@ -7,10 +7,25 @@
     onMarkWatched?: () => void;
   }
 
+  interface StreamInfo {
+    video_id: string;
+    platform: string;
+    title?: string;
+    stream_url?: string;
+    audio_url?: string;
+    is_authenticated: boolean;
+    is_premium: boolean;
+    quality?: string;
+    error?: string;
+  }
+
   let { onMarkWatched }: Props = $props();
 
   let iframeLoaded = $state(false);
   let iframeError = $state(false);
+  let streamInfo = $state<StreamInfo | null>(null);
+  let loadingStream = $state(false);
+  let useDirectStream = $state(false);
 
   // Computed values
   const video = $derived(videoPlayer.currentVideo);
@@ -19,11 +34,37 @@
   const canEmbed = $derived(video?.embedConfig.supportsEmbed && !iframeError);
   const platformName = $derived(video ? getPlatformName(video.platform) : '');
   const platformColor = $derived(video ? getPlatformColor(video.platform) : '#666');
+  const hasDirectStream = $derived(streamInfo?.stream_url && useDirectStream);
+  const isPremium = $derived(streamInfo?.is_premium ?? false);
 
   function handleClose() {
     videoPlayer.close();
     iframeLoaded = false;
     iframeError = false;
+    streamInfo = null;
+    useDirectStream = false;
+  }
+
+  async function fetchStreamInfo() {
+    if (!video || video.platform !== 'youtube') return;
+
+    loadingStream = true;
+    try {
+      const response = await fetch(`/api/stream/${video.platform}/${video.videoId}`);
+      if (response.ok) {
+        streamInfo = await response.json();
+      }
+    } catch {
+      // Stream API not available, continue with embed
+    } finally {
+      loadingStream = false;
+    }
+  }
+
+  function toggleDirectStream() {
+    if (streamInfo?.stream_url) {
+      useDirectStream = !useDirectStream;
+    }
   }
 
   function handleSwitchToPiP() {
@@ -57,7 +98,11 @@
     if (video) {
       iframeLoaded = false;
       iframeError = false;
+      streamInfo = null;
+      useDirectStream = false;
       onMarkWatched?.();
+      // Fetch stream info for authenticated playback
+      fetchStreamInfo();
     }
   });
 </script>
@@ -79,11 +124,32 @@
           <span class="platform-badge" style="background-color: {platformColor}">
             {platformName}
           </span>
+          {#if isPremium}
+            <span class="premium-badge" title="Authenticated playback">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
+              </svg>
+              Premium
+            </span>
+          {/if}
           {#if video.duration}
             <span class="duration">{formatDuration(video.duration)}</span>
           {/if}
         </div>
         <div class="header-right">
+          {#if streamInfo?.stream_url}
+            <button
+              class="header-btn stream-toggle"
+              class:active={useDirectStream}
+              onclick={toggleDirectStream}
+              title={useDirectStream ? 'Switch to embed player' : 'Switch to direct stream (no ads)'}
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM9 8l7 4-7 4V8z"/>
+              </svg>
+              <span class="stream-label">{useDirectStream ? 'Direct' : 'Embed'}</span>
+            </button>
+          {/if}
           <button
             class="header-btn pip-btn"
             onclick={handleSwitchToPiP}
@@ -107,7 +173,22 @@
 
       <!-- Video Content -->
       <div class="player-content">
-        {#if canEmbed && embedUrl}
+        {#if hasDirectStream && streamInfo?.stream_url}
+          <!-- Direct stream playback (no ads, premium quality) -->
+          <div class="direct-player">
+            <video
+              src={streamInfo.stream_url}
+              controls
+              autoplay
+              class="direct-video"
+            >
+              Your browser does not support video playback.
+            </video>
+            {#if streamInfo.quality}
+              <span class="quality-badge">{streamInfo.quality}</span>
+            {/if}
+          </div>
+        {:else if canEmbed && embedUrl}
           <div class="iframe-container">
             {#if !iframeLoaded}
               <div class="loading-spinner">
@@ -236,12 +317,70 @@
     background: var(--color-bg-secondary);
   }
 
+  .premium-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, #ffd700, #ffb700);
+    color: #000;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .stream-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  .stream-toggle.active {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+  }
+
+  .stream-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
   /* Video Content */
   .player-content {
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
     background: black;
+  }
+
+  .direct-player {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .direct-video {
+    width: 100%;
+    height: 100%;
+    background: black;
+  }
+
+  .quality-badge {
+    position: absolute;
+    top: var(--spacing-sm);
+    right: var(--spacing-sm);
+    padding: 2px 6px;
+    background: rgba(0, 0, 0, 0.75);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: var(--radius-sm);
+    pointer-events: none;
   }
 
   .iframe-container {

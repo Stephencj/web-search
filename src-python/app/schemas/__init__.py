@@ -35,6 +35,15 @@ from app.schemas.feed import (
     ChannelGroupedFeedResponse,
     WatchStateUpdate,
 )
+from app.schemas.settings import (
+    SettingValue,
+    CrawlerSettingsResponse,
+    CrawlerSettingsUpdate,
+    ApiKeyCreate,
+    ApiKeyResponse,
+    AppSettingsResponse,
+    SettingUpdateResponse,
+)
 
 __all__ = [
     "IndexCreate",
@@ -64,4 +73,12 @@ __all__ = [
     "ChannelGroupedFeed",
     "ChannelGroupedFeedResponse",
     "WatchStateUpdate",
+    # Settings
+    "SettingValue",
+    "CrawlerSettingsResponse",
+    "CrawlerSettingsUpdate",
+    "ApiKeyCreate",
+    "ApiKeyResponse",
+    "AppSettingsResponse",
+    "SettingUpdateResponse",
 ]

@@ -59,11 +59,13 @@ async def get_feed(
     """
     Get the video feed in chronological order.
 
-    Returns videos from all subscribed channels, newest first.
+    Returns videos from all active subscribed channels, newest first.
     """
-    # Build query
+    # Build query - only include items from active channels
     query = (
         select(FeedItem)
+        .join(Channel)
+        .where(Channel.is_active == True)
         .options(selectinload(FeedItem.channel))
         .order_by(desc(FeedItem.upload_date))
     )

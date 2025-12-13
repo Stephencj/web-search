@@ -85,9 +85,21 @@ class FeedSyncService:
 
         results = []
         for channel in channels:
-            # Skip channels with too many consecutive errors
+            # Deactivate channels with too many consecutive errors
             if channel.consecutive_errors >= 5:
-                logger.warning(f"Skipping channel {channel.name} due to {channel.consecutive_errors} consecutive errors")
+                logger.warning(
+                    f"Deactivating channel {channel.name} due to {channel.consecutive_errors} consecutive errors. "
+                    f"Last error: {channel.last_sync_error}"
+                )
+                channel.is_active = False
+                await db.commit()
+                results.append({
+                    "channel_id": channel.id,
+                    "channel_name": channel.name,
+                    "success": False,
+                    "error": f"Deactivated after {channel.consecutive_errors} consecutive errors",
+                    "new_videos": 0,
+                })
                 continue
 
             sync_result = await self.sync_channel(db, channel)
