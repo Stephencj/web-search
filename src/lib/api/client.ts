@@ -290,6 +290,85 @@ export interface FeedStats {
   by_platform: Record<string, number>;
 }
 
+// Discover (Federated Search) types
+export interface PlatformInfo {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  supports_search: boolean;
+  supports_channel_feed: boolean;
+  supports_playlists: boolean;
+}
+
+export interface DiscoverVideoResult {
+  platform: string;
+  video_id: string;
+  video_url: string;
+  title: string;
+  description: string | null;
+  thumbnail_url: string | null;
+  duration_seconds: number | null;
+  view_count: number | null;
+  upload_date: string | null;
+  channel_name: string | null;
+  channel_id: string | null;
+  channel_url: string | null;
+  channel_avatar_url: string | null;
+  like_count: number | null;
+  tags: string[];
+}
+
+export interface DiscoverChannelResult {
+  platform: string;
+  channel_id: string;
+  channel_url: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  banner_url: string | null;
+  subscriber_count: number | null;
+  video_count: number | null;
+}
+
+export interface DiscoverPlaylistResult {
+  platform: string;
+  playlist_id: string;
+  playlist_url: string;
+  name: string;
+  description: string | null;
+  thumbnail_url: string | null;
+  video_count: number | null;
+  channel_name: string | null;
+  channel_url: string | null;
+}
+
+export interface SearchTiming {
+  platform: string;
+  duration_ms: number;
+  success: boolean;
+  error: string | null;
+}
+
+export interface DiscoverSearchResponse<T> {
+  query: string;
+  search_type: string;
+  total_results: number;
+  results: T[];
+  by_platform: Record<string, T[]>;
+  timings: SearchTiming[];
+  total_duration_ms: number;
+  platforms_searched: string[];
+  platforms_failed: string[];
+}
+
+export interface QuickSaveResponse {
+  type: 'video' | 'channel' | 'playlist';
+  platform: string;
+  saved: DiscoverVideoResult | DiscoverChannelResult | DiscoverPlaylistResult;
+  message: string;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -704,6 +783,66 @@ class ApiClient {
 
   async getFeedStats(): Promise<FeedStats> {
     return this.request('/feed/stats');
+  }
+
+  // Discover (Federated Search)
+  async listPlatforms(): Promise<{ platforms: PlatformInfo[]; total: number }> {
+    return this.request('/discover/platforms');
+  }
+
+  async discoverVideos(params: {
+    query: string;
+    platforms?: string[];
+    max_per_platform?: number;
+  }): Promise<DiscoverSearchResponse<DiscoverVideoResult>> {
+    return this.request('/discover/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: params.query,
+        platforms: params.platforms,
+        type: 'videos',
+        max_per_platform: params.max_per_platform || 10,
+      }),
+    });
+  }
+
+  async discoverChannels(params: {
+    query: string;
+    platforms?: string[];
+    max_per_platform?: number;
+  }): Promise<DiscoverSearchResponse<DiscoverChannelResult>> {
+    return this.request('/discover/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: params.query,
+        platforms: params.platforms,
+        type: 'channels',
+        max_per_platform: params.max_per_platform || 10,
+      }),
+    });
+  }
+
+  async discoverPlaylists(params: {
+    query: string;
+    platforms?: string[];
+    max_per_platform?: number;
+  }): Promise<DiscoverSearchResponse<DiscoverPlaylistResult>> {
+    return this.request('/discover/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: params.query,
+        platforms: params.platforms,
+        type: 'playlists',
+        max_per_platform: params.max_per_platform || 10,
+      }),
+    });
+  }
+
+  async quickSave(url: string): Promise<QuickSaveResponse> {
+    return this.request('/discover/quick-save', {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
   }
 }
 

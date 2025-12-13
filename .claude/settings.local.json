@@ -30,7 +30,8 @@
       "Bash(npm run check:*)",
       "Bash(git reset:*)",
       "Bash(docker-compose down:*)",
-      "Bash(docker-compose up:*)"
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose ps:*)"
     ]
   }
 }
