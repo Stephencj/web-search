@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api, type Channel, type ImportResult } from '$lib/api/client';
+  import { api, type Channel, type ImportResult, type ChannelSearchResult } from '$lib/api/client';
 
   let channels = $state<Channel[]>([]);
   let loading = $state(true);
@@ -13,6 +13,15 @@
   let newChannelUrl = $state('');
   let adding = $state(false);
   let addError = $state<string | null>(null);
+
+  // Channel search
+  let searchQuery = $state('');
+  let searchPlatform = $state<'youtube' | 'rumble'>('youtube');
+  let searchResults = $state<ChannelSearchResult[]>([]);
+  let searching = $state(false);
+  let searchError = $state<string | null>(null);
+  let addMode = $state<'search' | 'url'>('search');
+  let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Import modal
   let showImportModal = $state(false);
@@ -54,13 +63,74 @@
     try {
       const channel = await api.addChannel(newChannelUrl.trim());
       channels = [channel, ...channels];
-      showAddModal = false;
-      newChannelUrl = '';
+      closeAddModal();
     } catch (e) {
       addError = e instanceof Error ? e.message : 'Failed to add channel';
     } finally {
       adding = false;
     }
+  }
+
+  async function handleAddFromSearch(result: ChannelSearchResult) {
+    adding = true;
+    addError = null;
+    try {
+      const channel = await api.addChannel(result.channel_url);
+      channels = [channel, ...channels];
+      closeAddModal();
+    } catch (e) {
+      addError = e instanceof Error ? e.message : 'Failed to add channel';
+    } finally {
+      adding = false;
+    }
+  }
+
+  async function searchChannels() {
+    if (!searchQuery.trim() || searching) return;
+
+    searching = true;
+    searchError = null;
+    try {
+      const response = await api.searchChannels({
+        query: searchQuery.trim(),
+        platform: searchPlatform,
+        limit: 10,
+      });
+      searchResults = response.results;
+    } catch (e) {
+      searchError = e instanceof Error ? e.message : 'Search failed';
+      searchResults = [];
+    } finally {
+      searching = false;
+    }
+  }
+
+  function handleSearchInput() {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    if (searchQuery.trim().length >= 2) {
+      searchTimeout = setTimeout(() => {
+        searchChannels();
+      }, 500);
+    } else {
+      searchResults = [];
+    }
+  }
+
+  function closeAddModal() {
+    showAddModal = false;
+    newChannelUrl = '';
+    searchQuery = '';
+    searchResults = [];
+    searchError = null;
+    addError = null;
+    addMode = 'search';
+  }
+
+  function formatSubscriberCount(count: number | null): string {
+    if (!count) return '';
+    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+    return count.toString();
   }
 
   async function handleImportUrls() {
@@ -346,16 +416,16 @@
 
 <!-- Add Channel Modal -->
 {#if showAddModal}
-  <div class="modal-overlay" onclick={() => (showAddModal = false)} role="presentation">
+  <div class="modal-overlay" onclick={closeAddModal} role="presentation">
     <div
-      class="modal"
+      class="modal modal-lg"
       onclick={(e) => e.stopPropagation()}
       role="dialog"
       aria-labelledby="add-modal-title"
     >
       <header class="modal-header">
         <h2 id="add-modal-title">Add Channel</h2>
-        <button class="close-btn" onclick={() => (showAddModal = false)}>
+        <button class="close-btn" onclick={closeAddModal}>
           <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
             <path
               d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
@@ -364,31 +434,126 @@
         </button>
       </header>
       <div class="modal-body">
-        <div class="form-group">
-          <label for="channel-url">Channel URL</label>
-          <input
-            id="channel-url"
-            type="url"
-            class="input"
-            placeholder="https://www.youtube.com/@channel or https://rumble.com/c/channel"
-            bind:value={newChannelUrl}
-            onkeydown={(e) => e.key === 'Enter' && handleAddChannel()}
-          />
-          <p class="form-hint">Supports YouTube and Rumble channel URLs</p>
+        <!-- Mode Tabs -->
+        <div class="mode-tabs">
+          <button
+            class="mode-tab"
+            class:active={addMode === 'search'}
+            onclick={() => (addMode = 'search')}
+          >
+            Search
+          </button>
+          <button
+            class="mode-tab"
+            class:active={addMode === 'url'}
+            onclick={() => (addMode = 'url')}
+          >
+            Paste URL
+          </button>
         </div>
+
+        {#if addMode === 'search'}
+          <!-- Search Mode -->
+          <div class="search-section">
+            <div class="search-row">
+              <select class="select platform-select" bind:value={searchPlatform} onchange={() => { searchResults = []; if (searchQuery.trim()) searchChannels(); }}>
+                <option value="youtube">YouTube</option>
+                <option value="rumble">Rumble</option>
+              </select>
+              <div class="search-input-wrapper">
+                <input
+                  type="text"
+                  class="input"
+                  placeholder="Search for a channel..."
+                  bind:value={searchQuery}
+                  oninput={handleSearchInput}
+                  onkeydown={(e) => e.key === 'Enter' && searchChannels()}
+                />
+                {#if searching}
+                  <div class="search-spinner"></div>
+                {/if}
+              </div>
+              <button class="btn btn-primary" onclick={searchChannels} disabled={!searchQuery.trim() || searching}>
+                Search
+              </button>
+            </div>
+
+            {#if searchError}
+              <div class="error-inline">{searchError}</div>
+            {/if}
+
+            {#if searchResults.length > 0}
+              <div class="search-results">
+                {#each searchResults as result}
+                  <div class="search-result-item">
+                    <div class="result-avatar">
+                      {#if result.avatar_url}
+                        <img src={result.avatar_url} alt={result.name} />
+                      {:else}
+                        <div class="avatar-placeholder" style="background-color: {result.platform === 'youtube' ? '#ff0000' : '#85c742'}">
+                          {result.platform === 'youtube' ? 'YT' : 'R'}
+                        </div>
+                      {/if}
+                    </div>
+                    <div class="result-info">
+                      <div class="result-name">{result.name}</div>
+                      <div class="result-meta">
+                        {#if result.subscriber_count}
+                          <span>{formatSubscriberCount(result.subscriber_count)} subscribers</span>
+                        {/if}
+                        {#if result.video_count}
+                          <span>{result.video_count} videos</span>
+                        {/if}
+                      </div>
+                    </div>
+                    <button
+                      class="btn btn-primary btn-sm"
+                      onclick={() => handleAddFromSearch(result)}
+                      disabled={adding}
+                    >
+                      {adding ? '...' : 'Add'}
+                    </button>
+                  </div>
+                {/each}
+              </div>
+            {:else if searchQuery.trim() && !searching}
+              <div class="no-results">
+                <p>No channels found for "{searchQuery}"</p>
+                <p class="hint">Try a different search term or switch platforms</p>
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <!-- URL Mode -->
+          <div class="form-group">
+            <label for="channel-url">Channel URL</label>
+            <input
+              id="channel-url"
+              type="url"
+              class="input"
+              placeholder="https://www.youtube.com/@channel or https://rumble.com/c/channel"
+              bind:value={newChannelUrl}
+              onkeydown={(e) => e.key === 'Enter' && handleAddChannel()}
+            />
+            <p class="form-hint">Supports YouTube and Rumble channel URLs</p>
+          </div>
+        {/if}
+
         {#if addError}
           <div class="error-inline">{addError}</div>
         {/if}
       </div>
       <footer class="modal-footer">
-        <button class="btn btn-secondary" onclick={() => (showAddModal = false)}>Cancel</button>
-        <button
-          class="btn btn-primary"
-          onclick={handleAddChannel}
-          disabled={!newChannelUrl.trim() || adding}
-        >
-          {adding ? 'Adding...' : 'Add Channel'}
-        </button>
+        <button class="btn btn-secondary" onclick={closeAddModal}>Cancel</button>
+        {#if addMode === 'url'}
+          <button
+            class="btn btn-primary"
+            onclick={handleAddChannel}
+            disabled={!newChannelUrl.trim() || adding}
+          >
+            {adding ? 'Adding...' : 'Add Channel'}
+          </button>
+        {/if}
       </footer>
     </div>
   </div>
@@ -1012,6 +1177,149 @@
     margin: var(--spacing-sm) 0 0 var(--spacing-md);
     padding: 0;
     font-size: 0.85rem;
+  }
+
+  /* Channel Search Styles */
+  .mode-tabs {
+    display: flex;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-lg);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .mode-tab {
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    transition: all 0.2s;
+  }
+
+  .mode-tab:hover {
+    color: var(--color-text);
+  }
+
+  .mode-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+  }
+
+  .search-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  .search-row {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: stretch;
+  }
+
+  .platform-select {
+    width: 120px;
+    flex-shrink: 0;
+  }
+
+  .search-input-wrapper {
+    flex: 1;
+    position: relative;
+  }
+
+  .search-input-wrapper .input {
+    padding-right: 40px;
+  }
+
+  .search-spinner {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  .search-results {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .search-result-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    transition: border-color 0.2s;
+  }
+
+  .search-result-item:hover {
+    border-color: var(--color-primary);
+  }
+
+  .result-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .result-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .result-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .result-name {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .result-meta {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    display: flex;
+    gap: var(--spacing-sm);
+  }
+
+  .btn-sm {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 0.85rem;
+  }
+
+  .no-results {
+    text-align: center;
+    padding: var(--spacing-lg);
+    color: var(--color-text-secondary);
+  }
+
+  .no-results p {
+    margin: 0;
+  }
+
+  .no-results .hint {
+    font-size: 0.85rem;
+    margin-top: var(--spacing-xs);
   }
 
   /* Mobile Styles */

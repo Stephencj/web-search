@@ -28,7 +28,9 @@
       "Bash(python -m py_compile:*)",
       "Bash(python:*)",
       "Bash(npm run check:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)"
     ]
   }
 }

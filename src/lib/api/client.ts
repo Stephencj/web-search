@@ -264,6 +264,24 @@ export interface SyncResult {
   error: string | null;
 }
 
+export interface ChannelSearchResult {
+  platform: 'youtube' | 'rumble';
+  channel_id: string;
+  channel_url: string;
+  name: string;
+  description: string | null;
+  avatar_url: string | null;
+  subscriber_count: number | null;
+  video_count: number | null;
+}
+
+export interface ChannelSearchResponse {
+  query: string;
+  platform: string;
+  results: ChannelSearchResult[];
+  total: number;
+}
+
 export interface FeedStats {
   total_videos: number;
   unwatched_videos: number;
@@ -578,6 +596,18 @@ class ApiClient {
     if (params?.is_active !== undefined) searchParams.set('is_active', String(params.is_active));
     const query = searchParams.toString();
     return this.request(`/channels${query ? `?${query}` : ''}`);
+  }
+
+  async searchChannels(params: {
+    query: string;
+    platform?: 'youtube' | 'rumble';
+    limit?: number;
+  }): Promise<ChannelSearchResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('query', params.query);
+    if (params.platform) searchParams.set('platform', params.platform);
+    if (params.limit) searchParams.set('limit', String(params.limit));
+    return this.request(`/channels/search?${searchParams.toString()}`);
   }
 
   async addChannel(url: string): Promise<Channel> {
