@@ -1,7 +1,7 @@
 /* WebSearch - Global Styles */
 
 :root {
-  /* Colors */
+  /* Light theme colors (default) */
   --color-bg: #f8f9fa;
   --color-bg-secondary: #ffffff;
   --color-text: #1a1a2e;
@@ -48,14 +48,42 @@
   --breakpoint-lg: 1024px;
 }
 
+/* Dark theme colors */
+:root[data-theme="dark"] {
+  --color-bg: #1a1a2e;
+  --color-bg-secondary: #16213e;
+  --color-text: #e8e8e8;
+  --color-text-secondary: #a0a0a0;
+  --color-border: #2d3748;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+}
+
+/* Auto theme - follows system preference */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root[data-theme="auto"] {
     --color-bg: #1a1a2e;
     --color-bg-secondary: #16213e;
     --color-text: #e8e8e8;
     --color-text-secondary: #a0a0a0;
     --color-border: #2d3748;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
   }
+}
+
+/* Light theme explicit (for when switching from dark) */
+:root[data-theme="light"] {
+  --color-bg: #f8f9fa;
+  --color-bg-secondary: #ffffff;
+  --color-text: #1a1a2e;
+  --color-text-secondary: #6c757d;
+  --color-border: #dee2e6;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
 }
 
 * {

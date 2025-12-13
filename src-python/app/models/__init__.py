@@ -12,6 +12,7 @@ from app.models.channel import Channel
 from app.models.feed_item import FeedItem
 from app.models.saved_video import SavedVideo
 from app.models.playlist import Playlist
+from app.models.platform_account import PlatformAccount
 
 __all__ = [
     "Index",
@@ -27,4 +28,5 @@ __all__ = [
     "FeedItem",
     "SavedVideo",
     "Playlist",
+    "PlatformAccount",
 ]

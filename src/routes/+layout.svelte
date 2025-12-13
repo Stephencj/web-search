@@ -3,9 +3,16 @@
   import Sidebar from '$lib/components/Sidebar.svelte';
   import { VideoPlayerModal, PiPPlayer } from '$lib/components/VideoPlayer';
   import { page } from '$app/stores';
+  import { themeStore } from '$lib/stores/theme.svelte';
 
   let { children } = $props();
   let sidebarOpen = $state(false);
+
+  // Initialize theme on mount
+  $effect(() => {
+    const cleanup = themeStore.init();
+    return cleanup;
+  });
 
   function toggleSidebar() {
     sidebarOpen = !sidebarOpen;

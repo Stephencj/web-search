@@ -43,6 +43,21 @@ class SyncSettings(BaseSettings):
     max_consecutive_errors: int = 5  # Auto-disable channel after this many failures
 
 
+class OAuthSettings(BaseSettings):
+    """OAuth2 settings for platform authentication."""
+    # YouTube OAuth (Google Cloud Console credentials)
+    youtube_client_id: Optional[str] = None
+    youtube_client_secret: Optional[str] = None
+    youtube_redirect_uri: str = "http://localhost:8000/api/accounts/callback/youtube"
+
+    # Encryption key for storing tokens (32 bytes, base64 encoded)
+    # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    encryption_key: Optional[str] = None
+
+    # Token refresh settings
+    token_refresh_buffer_seconds: int = 300  # Refresh 5 minutes before expiry
+
+
 class Settings(BaseSettings):
     """Main application settings."""
     model_config = SettingsConfigDict(
@@ -71,6 +86,7 @@ class Settings(BaseSettings):
     crawler: CrawlerSettings = Field(default_factory=CrawlerSettings)
     meilisearch: MeilisearchSettings = Field(default_factory=MeilisearchSettings)
     sync: SyncSettings = Field(default_factory=SyncSettings)
+    oauth: OAuthSettings = Field(default_factory=OAuthSettings)
 
     @property
     def sqlite_url(self) -> str:
