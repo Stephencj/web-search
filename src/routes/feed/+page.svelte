@@ -8,6 +8,7 @@
     type ChannelGroupedFeed,
     type FeedStats,
   } from '$lib/api/client';
+  import { videoPlayer, feedItemToVideoItem, formatDuration } from '$lib/stores/videoPlayer.svelte';
 
   // View mode
   let viewMode = $state<'chronological' | 'by_channel'>('chronological');
@@ -30,9 +31,6 @@
   let hasMore = $state(false);
   let totalItems = $state(0);
   const perPage = 24;
-
-  // Video player
-  let selectedVideo = $state<FeedItem | null>(null);
 
   // Syncing
   let syncing = $state(false);
@@ -168,35 +166,12 @@
   }
 
   function playVideo(item: FeedItem) {
-    selectedVideo = item;
+    const videoItem = feedItemToVideoItem(item);
+    videoPlayer.openModal(videoItem);
     // Mark as watched when playing
     if (!item.is_watched) {
       handleMarkWatched(item);
     }
-  }
-
-  function closePlayer() {
-    selectedVideo = null;
-  }
-
-  function getEmbedUrl(item: FeedItem): string {
-    if (item.platform === 'youtube') {
-      return `https://www.youtube.com/embed/${item.video_id}?autoplay=1`;
-    } else {
-      // Rumble - use the video URL directly in iframe or fallback to link
-      return item.video_url;
-    }
-  }
-
-  function formatDuration(seconds: number | null): string {
-    if (!seconds) return '';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    if (h > 0) {
-      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    }
-    return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
   function formatTimeAgo(dateStr: string): string {
@@ -474,42 +449,6 @@
     {/if}
   {/if}
 </div>
-
-<!-- Video Player Modal -->
-{#if selectedVideo}
-  <div class="player-overlay" onclick={closePlayer} role="presentation">
-    <div class="player-modal" onclick={(e) => e.stopPropagation()} role="dialog">
-      <button class="player-close" onclick={closePlayer}>
-        <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28">
-          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-        </svg>
-      </button>
-      <div class="player-content">
-        {#if selectedVideo.platform === 'youtube'}
-          <iframe
-            src={getEmbedUrl(selectedVideo)}
-            title={selectedVideo.title}
-            frameborder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowfullscreen
-          ></iframe>
-        {:else}
-          <!-- Rumble - open in new tab -->
-          <div class="rumble-fallback">
-            <p>Rumble videos open in a new tab</p>
-            <a href={selectedVideo.video_url} target="_blank" rel="noopener" class="btn btn-primary">
-              Watch on Rumble
-            </a>
-          </div>
-        {/if}
-      </div>
-      <div class="player-info">
-        <h2>{selectedVideo.title}</h2>
-        <p>{selectedVideo.channel_name} · {formatTimeAgo(selectedVideo.upload_date)}</p>
-      </div>
-    </div>
-  </div>
-{/if}
 
 <style>
   .feed-page {
@@ -940,75 +879,6 @@
     color: var(--color-text);
   }
 
-  /* Player Modal */
-  .player-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.9);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: var(--spacing-lg);
-  }
-
-  .player-modal {
-    position: relative;
-    width: 100%;
-    max-width: 1200px;
-    background: var(--color-bg);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-  }
-
-  .player-close {
-    position: absolute;
-    top: -40px;
-    right: 0;
-    background: none;
-    border: none;
-    color: white;
-    cursor: pointer;
-    padding: var(--spacing-xs);
-    z-index: 10;
-  }
-
-  .player-content {
-    aspect-ratio: 16/9;
-    background: black;
-  }
-
-  .player-content iframe {
-    width: 100%;
-    height: 100%;
-  }
-
-  .rumble-fallback {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--spacing-md);
-    color: white;
-  }
-
-  .player-info {
-    padding: var(--spacing-md);
-  }
-
-  .player-info h2 {
-    font-size: 1.1rem;
-    margin: 0 0 var(--spacing-xs);
-  }
-
-  .player-info p {
-    font-size: 0.9rem;
-    color: var(--color-text-secondary);
-    margin: 0;
-  }
-
   /* Button styles */
   .btn {
     padding: var(--spacing-sm) var(--spacing-md);
@@ -1095,32 +965,6 @@
 
     .group-videos {
       grid-template-columns: repeat(2, 1fr);
-    }
-
-    .player-overlay {
-      padding: 0;
-    }
-
-    .player-modal {
-      border-radius: 0;
-      max-width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .player-content {
-      flex: 1;
-      aspect-ratio: auto;
-    }
-
-    .player-close {
-      position: absolute;
-      top: var(--spacing-sm);
-      right: var(--spacing-sm);
-      background: rgba(0, 0, 0, 0.5);
-      border-radius: 50%;
-      padding: var(--spacing-sm);
     }
   }
 

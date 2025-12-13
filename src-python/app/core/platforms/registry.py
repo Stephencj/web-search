@@ -157,6 +157,31 @@ class PlatformRegistry:
         logger.info(f"Initialized {len(cls._adapters)} platform adapters")
 
 
+# Convenience instance wrapper for simpler API
+class PlatformRegistryInstance:
+    """Wrapper to provide instance-like access to the registry."""
+
+    def get_adapter(self, platform_id: str) -> Optional[PlatformAdapter]:
+        """Get a platform adapter by ID."""
+        return PlatformRegistry.get(platform_id)
+
+    def get_all_adapters(self) -> list[PlatformAdapter]:
+        """Get all registered platform adapters."""
+        return PlatformRegistry.all()
+
+    def detect_platform(self, url: str) -> Optional[PlatformAdapter]:
+        """Detect which platform a URL belongs to."""
+        return PlatformRegistry.detect_platform(url)
+
+    def get_platform_info(self) -> list[dict]:
+        """Get info for all platforms."""
+        return PlatformRegistry.get_platform_info()
+
+
+# Global instance for convenient access
+platform_registry = PlatformRegistryInstance()
+
+
 # Convenience functions
 def get_platform(platform_id: str) -> Optional[PlatformAdapter]:
     """Get a platform adapter by ID."""

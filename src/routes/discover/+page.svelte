@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api, type PlatformInfo, type DiscoverVideoResult, type DiscoverChannelResult, type SearchTiming } from '$lib/api/client';
+  import { videoPlayer, discoverVideoToVideoItem, formatDuration } from '$lib/stores/videoPlayer.svelte';
 
   // State
   let platforms = $state<PlatformInfo[]>([]);
@@ -14,6 +15,9 @@
   let error = $state<string | null>(null);
   let subscribingTo = $state<string | null>(null);
   let subscribeSuccess = $state<string | null>(null);
+  let savingVideo = $state<string | null>(null);
+  let saveSuccess = $state<string | null>(null);
+  let savedVideoIds = $state<Set<string>>(new Set());
 
   // Load platforms on mount
   $effect(() => {
@@ -106,15 +110,42 @@
     }
   }
 
-  function formatDuration(seconds: number | null): string {
-    if (!seconds) return '';
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    if (hrs > 0) {
-      return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  async function saveVideo(video: DiscoverVideoResult) {
+    const videoKey = `${video.platform}:${video.video_id}`;
+    savingVideo = videoKey;
+    saveSuccess = null;
+    try {
+      await api.saveVideo({
+        platform: video.platform,
+        video_id: video.video_id,
+        video_url: video.video_url,
+        title: video.title,
+        description: video.description,
+        thumbnail_url: video.thumbnail_url,
+        duration_seconds: video.duration_seconds,
+        view_count: video.view_count,
+        upload_date: video.upload_date,
+        channel_name: video.channel_name,
+        channel_id: video.channel_id,
+        channel_url: video.channel_url,
+      });
+      savedVideoIds = new Set([...savedVideoIds, videoKey]);
+      saveSuccess = video.title;
+      setTimeout(() => saveSuccess = null, 3000);
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to save video';
+    } finally {
+      savingVideo = null;
     }
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  function isVideoSaved(video: DiscoverVideoResult): boolean {
+    return savedVideoIds.has(`${video.platform}:${video.video_id}`);
+  }
+
+  function playVideo(video: DiscoverVideoResult) {
+    const videoItem = discoverVideoToVideoItem(video);
+    videoPlayer.openModal(videoItem);
   }
 
   function formatCount(count: number | null): string {
@@ -208,6 +239,10 @@
     <div class="success-message">Subscribed to {subscribeSuccess}!</div>
   {/if}
 
+  {#if saveSuccess}
+    <div class="success-message">Saved "{saveSuccess.slice(0, 50)}{saveSuccess.length > 50 ? '...' : ''}"!</div>
+  {/if}
+
   <!-- Timings -->
   {#if timings.length > 0}
     <div class="timings">
@@ -237,13 +272,18 @@
       <div class="video-grid">
         {#each videoResults as video}
           <div class="video-card">
-            <a href={video.video_url} target="_blank" rel="noopener noreferrer" class="thumbnail-link">
+            <button class="thumbnail-btn" onclick={() => playVideo(video)}>
               <div class="thumbnail">
                 {#if video.thumbnail_url}
                   <img src={video.thumbnail_url} alt={video.title} loading="lazy" />
                 {:else}
                   <div class="no-thumbnail">No Thumbnail</div>
                 {/if}
+                <div class="play-overlay">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
                 {#if video.duration_seconds}
                   <span class="duration">{formatDuration(video.duration_seconds)}</span>
                 {/if}
@@ -251,7 +291,7 @@
                   {getPlatformName(video.platform)}
                 </span>
               </div>
-            </a>
+            </button>
             <div class="video-info">
               <a href={video.video_url} target="_blank" rel="noopener noreferrer" class="video-title">
                 {video.title}
@@ -265,6 +305,21 @@
                 {/if}
               </div>
               <div class="video-actions">
+                <button
+                  class="action-btn save"
+                  class:saved={isVideoSaved(video)}
+                  onclick={() => saveVideo(video)}
+                  disabled={savingVideo === `${video.platform}:${video.video_id}` || isVideoSaved(video)}
+                  title={isVideoSaved(video) ? 'Already saved' : 'Save video'}
+                >
+                  {#if savingVideo === `${video.platform}:${video.video_id}`}
+                    ...
+                  {:else if isVideoSaved(video)}
+                    Saved
+                  {:else}
+                    Save
+                  {/if}
+                </button>
                 {#if video.channel_url}
                   <button
                     class="action-btn subscribe"
@@ -275,9 +330,9 @@
                     {subscribingTo === video.channel_url ? '...' : '+Sub'}
                   </button>
                 {/if}
-                <a href={video.video_url} target="_blank" rel="noopener noreferrer" class="action-btn watch">
-                  Watch
-                </a>
+                <button class="action-btn play" onclick={() => playVideo(video)}>
+                  Play
+                </button>
               </div>
             </div>
           </div>
@@ -466,6 +521,7 @@
     border: 2px solid var(--color-border);
     border-radius: var(--radius-md);
     background: var(--color-bg);
+    color: var(--color-text);
   }
 
   .search-input:focus {
@@ -587,9 +643,13 @@
     box-shadow: var(--shadow-md);
   }
 
-  .thumbnail-link {
+  .thumbnail-btn {
     display: block;
-    text-decoration: none;
+    width: 100%;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
   }
 
   .thumbnail {
@@ -613,6 +673,22 @@
     justify-content: center;
     color: var(--color-text-secondary);
     background: var(--color-bg);
+  }
+
+  .play-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transition: opacity 0.2s;
+    color: white;
+  }
+
+  .thumbnail-btn:hover .play-overlay {
+    opacity: 1;
   }
 
   .duration {
@@ -689,6 +765,25 @@
     align-items: center;
   }
 
+  .action-btn.save {
+    background: var(--color-success);
+    color: white;
+  }
+
+  .action-btn.save:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .action-btn.save:disabled {
+    opacity: 0.5;
+  }
+
+  .action-btn.save.saved {
+    background: var(--color-bg-secondary);
+    color: var(--color-text-secondary);
+    cursor: default;
+  }
+
   .action-btn.subscribe {
     background: var(--color-primary);
     color: white;
@@ -702,13 +797,13 @@
     opacity: 0.5;
   }
 
-  .action-btn.watch {
+  .action-btn.play {
     background: var(--color-bg);
     color: var(--color-text);
     border: 1px solid var(--color-border);
   }
 
-  .action-btn.watch:hover {
+  .action-btn.play:hover {
     background: var(--color-bg-secondary);
   }
 

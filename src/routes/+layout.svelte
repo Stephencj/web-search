@@ -1,6 +1,7 @@
 <script lang="ts">
   import '$lib/../app.css';
   import Sidebar from '$lib/components/Sidebar.svelte';
+  import { VideoPlayerModal, PiPPlayer } from '$lib/components/VideoPlayer';
   import { page } from '$app/stores';
 
   let { children } = $props();
@@ -18,6 +19,7 @@
   function getPageTitle(pathname: string): string {
     if (pathname === '/') return 'Search';
     if (pathname.startsWith('/discover')) return 'Discover';
+    if (pathname.startsWith('/saved')) return 'Saved';
     if (pathname.startsWith('/feed')) return 'Feed';
     if (pathname.startsWith('/subscriptions')) return 'Subscriptions';
     if (pathname.startsWith('/collections')) return 'Collections';
@@ -56,6 +58,12 @@
   <main class="main-content">
     {@render children()}
   </main>
+
+  <!-- Global Video Player Modal -->
+  <VideoPlayerModal />
+
+  <!-- Picture-in-Picture Player -->
+  <PiPPlayer />
 </div>
 
 <style>

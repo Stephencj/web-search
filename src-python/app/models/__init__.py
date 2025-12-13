@@ -10,6 +10,8 @@ from app.models.settings import AppSetting
 from app.models.collection import Collection, CollectionItem
 from app.models.channel import Channel
 from app.models.feed_item import FeedItem
+from app.models.saved_video import SavedVideo
+from app.models.playlist import Playlist
 
 __all__ = [
     "Index",
@@ -23,4 +25,6 @@ __all__ = [
     "CollectionItem",
     "Channel",
     "FeedItem",
+    "SavedVideo",
+    "Playlist",
 ]

@@ -369,6 +369,92 @@ export interface QuickSaveResponse {
   message: string;
 }
 
+// Saved Videos types
+export interface SavedVideo {
+  id: number;
+  platform: string;
+  video_id: string;
+  video_url: string;
+  title: string;
+  description: string | null;
+  thumbnail_url: string | null;
+  duration_seconds: number | null;
+  view_count: number | null;
+  upload_date: string | null;
+  channel_name: string | null;
+  channel_id: string | null;
+  channel_url: string | null;
+  is_watched: boolean;
+  watched_at: string | null;
+  watch_progress_seconds: number | null;
+  notes: string | null;
+  saved_at: string;
+  updated_at: string;
+  duration_formatted: string;
+}
+
+export interface SavedVideoCreate {
+  platform: string;
+  video_id: string;
+  video_url: string;
+  title: string;
+  description?: string | null;
+  thumbnail_url?: string | null;
+  duration_seconds?: number | null;
+  view_count?: number | null;
+  upload_date?: string | null;
+  channel_name?: string | null;
+  channel_id?: string | null;
+  channel_url?: string | null;
+  notes?: string | null;
+}
+
+export interface SavedVideoListResponse {
+  items: SavedVideo[];
+  total: number;
+}
+
+export interface SavedVideoStats {
+  total_videos: number;
+  watched_videos: number;
+  unwatched_videos: number;
+  by_platform: Record<string, number>;
+}
+
+// Playlist types
+export interface FollowedPlaylist {
+  id: number;
+  platform: string;
+  playlist_id: string;
+  playlist_url: string;
+  name: string;
+  description: string | null;
+  thumbnail_url: string | null;
+  video_count: number | null;
+  channel_name: string | null;
+  channel_url: string | null;
+  is_active: boolean;
+  last_synced_at: string | null;
+  last_sync_error: string | null;
+  consecutive_errors: number;
+  created_at: string;
+  updated_at: string;
+  display_name: string;
+}
+
+export interface PlaylistListResponse {
+  items: FollowedPlaylist[];
+  total: number;
+}
+
+export interface PlaylistSyncResult {
+  playlist_id: number;
+  playlist_name: string;
+  success: boolean;
+  new_videos: number;
+  error: string | null;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -692,7 +778,7 @@ class ApiClient {
   async addChannel(url: string): Promise<Channel> {
     return this.request('/channels', {
       method: 'POST',
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ channel_url: url }),
     });
   }
 
@@ -843,6 +929,123 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ url }),
     });
+  }
+
+  // Saved Videos
+  async listSavedVideos(params?: {
+    platform?: string;
+    is_watched?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<SavedVideoListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.platform) searchParams.set('platform', params.platform);
+    if (params?.is_watched !== undefined) searchParams.set('is_watched', String(params.is_watched));
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    if (params?.offset) searchParams.set('offset', String(params.offset));
+    const query = searchParams.toString();
+    return this.request(`/saved-videos${query ? `?${query}` : ''}`);
+  }
+
+  async getSavedVideoStats(): Promise<SavedVideoStats> {
+    return this.request('/saved-videos/stats');
+  }
+
+  async saveVideo(data: SavedVideoCreate): Promise<SavedVideo> {
+    return this.request('/saved-videos', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async saveVideoFromUrl(url: string, notes?: string): Promise<SavedVideo> {
+    return this.request('/saved-videos/from-url', {
+      method: 'POST',
+      body: JSON.stringify({ url, notes }),
+    });
+  }
+
+  async checkIfVideoSaved(platform: string, videoId: string): Promise<{ is_saved: boolean }> {
+    return this.request(`/saved-videos/check?platform=${encodeURIComponent(platform)}&video_id=${encodeURIComponent(videoId)}`);
+  }
+
+  async getSavedVideo(id: number): Promise<SavedVideo> {
+    return this.request(`/saved-videos/${id}`);
+  }
+
+  async updateSavedVideo(id: number, data: Partial<{ notes: string; is_watched: boolean; watch_progress_seconds: number }>): Promise<SavedVideo> {
+    return this.request(`/saved-videos/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async markSavedVideoWatched(id: number, progressSeconds?: number): Promise<SavedVideo> {
+    const params = progressSeconds ? `?progress_seconds=${progressSeconds}` : '';
+    return this.request(`/saved-videos/${id}/watched${params}`, { method: 'PUT' });
+  }
+
+  async markSavedVideoUnwatched(id: number): Promise<SavedVideo> {
+    return this.request(`/saved-videos/${id}/unwatched`, { method: 'PUT' });
+  }
+
+  async deleteSavedVideo(id: number): Promise<void> {
+    return this.request(`/saved-videos/${id}`, { method: 'DELETE' });
+  }
+
+  // Playlists
+  async listPlaylists(params?: {
+    platform?: string;
+    is_active?: boolean;
+  }): Promise<PlaylistListResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.platform) searchParams.set('platform', params.platform);
+    if (params?.is_active !== undefined) searchParams.set('is_active', String(params.is_active));
+    const query = searchParams.toString();
+    return this.request(`/playlists${query ? `?${query}` : ''}`);
+  }
+
+  async followPlaylist(data: {
+    platform: string;
+    playlist_id: string;
+    playlist_url: string;
+    name: string;
+    description?: string | null;
+    thumbnail_url?: string | null;
+    video_count?: number | null;
+    channel_name?: string | null;
+    channel_url?: string | null;
+  }): Promise<FollowedPlaylist> {
+    return this.request('/playlists', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async followPlaylistFromUrl(url: string): Promise<FollowedPlaylist> {
+    return this.request('/playlists/from-url', {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
+  }
+
+  async getPlaylist(id: number): Promise<FollowedPlaylist> {
+    return this.request(`/playlists/${id}`);
+  }
+
+  async updatePlaylist(id: number, data: Partial<{ name: string; is_active: boolean }>): Promise<FollowedPlaylist> {
+    return this.request(`/playlists/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async syncPlaylist(id: number): Promise<PlaylistSyncResult> {
+    return this.request(`/playlists/${id}/sync`, { method: 'POST' });
+  }
+
+  async unfollowPlaylist(id: number): Promise<void> {
+    return this.request(`/playlists/${id}`, { method: 'DELETE' });
   }
 }
 
