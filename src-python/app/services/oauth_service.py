@@ -24,6 +24,7 @@ class OAuthService:
     YOUTUBE_TOKEN_URL = "https://oauth2.googleapis.com/token"
     YOUTUBE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo"
     YOUTUBE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
+    YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3"
 
     # Required scopes for YouTube
     YOUTUBE_SCOPES = [
@@ -419,6 +420,178 @@ class OAuthService:
         ]
         for state in expired:
             self._state_store.pop(state, None)
+
+    async def fetch_youtube_subscriptions(
+        self,
+        db: AsyncSession,
+        account: PlatformAccount,
+    ) -> list[dict]:
+        """
+        Fetch all YouTube subscriptions for an account.
+
+        Returns:
+            List of subscription dicts with channel info
+        """
+        access_token = await self.get_valid_access_token(db, account)
+        if not access_token:
+            logger.error("No valid access token for fetching subscriptions")
+            return []
+
+        subscriptions = []
+        page_token = None
+
+        try:
+            async with httpx.AsyncClient() as client:
+                while True:
+                    params = {
+                        "part": "snippet",
+                        "mine": "true",
+                        "maxResults": 50,
+                    }
+                    if page_token:
+                        params["pageToken"] = page_token
+
+                    response = await client.get(
+                        f"{self.YOUTUBE_API_URL}/subscriptions",
+                        params=params,
+                        headers={"Authorization": f"Bearer {access_token}"},
+                        timeout=30,
+                    )
+
+                    if response.status_code != 200:
+                        logger.error(f"Failed to fetch subscriptions: {response.text}")
+                        break
+
+                    data = response.json()
+
+                    for item in data.get("items", []):
+                        snippet = item.get("snippet", {})
+                        resource_id = snippet.get("resourceId", {})
+                        channel_id = resource_id.get("channelId")
+
+                        if channel_id:
+                            subscriptions.append({
+                                "channel_id": channel_id,
+                                "channel_url": f"https://www.youtube.com/channel/{channel_id}",
+                                "title": snippet.get("title"),
+                                "description": snippet.get("description"),
+                                "thumbnail_url": snippet.get("thumbnails", {}).get("default", {}).get("url"),
+                            })
+
+                    # Check for more pages
+                    page_token = data.get("nextPageToken")
+                    if not page_token:
+                        break
+
+            logger.info(f"Fetched {len(subscriptions)} YouTube subscriptions")
+            return subscriptions
+
+        except Exception as e:
+            logger.exception(f"Error fetching YouTube subscriptions: {e}")
+            return subscriptions
+
+    async def fetch_youtube_playlists(
+        self,
+        db: AsyncSession,
+        account: PlatformAccount,
+    ) -> list[dict]:
+        """
+        Fetch all YouTube playlists for an account (including Watch Later, Liked Videos).
+
+        Returns:
+            List of playlist dicts
+        """
+        access_token = await self.get_valid_access_token(db, account)
+        if not access_token:
+            logger.error("No valid access token for fetching playlists")
+            return []
+
+        playlists = []
+        page_token = None
+
+        try:
+            async with httpx.AsyncClient() as client:
+                while True:
+                    params = {
+                        "part": "snippet,contentDetails",
+                        "mine": "true",
+                        "maxResults": 50,
+                    }
+                    if page_token:
+                        params["pageToken"] = page_token
+
+                    response = await client.get(
+                        f"{self.YOUTUBE_API_URL}/playlists",
+                        params=params,
+                        headers={"Authorization": f"Bearer {access_token}"},
+                        timeout=30,
+                    )
+
+                    if response.status_code != 200:
+                        logger.error(f"Failed to fetch playlists: {response.text}")
+                        break
+
+                    data = response.json()
+
+                    for item in data.get("items", []):
+                        snippet = item.get("snippet", {})
+                        content_details = item.get("contentDetails", {})
+
+                        playlists.append({
+                            "playlist_id": item.get("id"),
+                            "playlist_url": f"https://www.youtube.com/playlist?list={item.get('id')}",
+                            "title": snippet.get("title"),
+                            "description": snippet.get("description"),
+                            "thumbnail_url": snippet.get("thumbnails", {}).get("default", {}).get("url"),
+                            "video_count": content_details.get("itemCount", 0),
+                        })
+
+                    # Check for more pages
+                    page_token = data.get("nextPageToken")
+                    if not page_token:
+                        break
+
+            logger.info(f"Fetched {len(playlists)} YouTube playlists")
+            return playlists
+
+        except Exception as e:
+            logger.exception(f"Error fetching YouTube playlists: {e}")
+            return playlists
+
+    async def import_youtube_subscriptions(
+        self,
+        db: AsyncSession,
+        account: PlatformAccount,
+    ) -> dict:
+        """
+        Fetch and import all YouTube subscriptions as channels.
+
+        Returns:
+            Dict with import results (imported, skipped, failed counts)
+        """
+        from app.services.channel_service import get_channel_service
+
+        # Fetch subscriptions from YouTube API
+        subscriptions = await self.fetch_youtube_subscriptions(db, account)
+
+        if not subscriptions:
+            return {"imported": 0, "skipped": 0, "failed": 0, "total_found": 0}
+
+        # Extract channel URLs
+        urls = [sub["channel_url"] for sub in subscriptions]
+
+        # Import using channel service (handles duplicates automatically)
+        channel_service = get_channel_service()
+        result = await channel_service.import_from_urls(db, urls, import_source="youtube_oauth")
+
+        result["total_found"] = len(subscriptions)
+        logger.info(
+            f"YouTube subscription import complete: "
+            f"{result['imported']} imported, {result['skipped']} skipped, "
+            f"{result['failed']} failed (from {len(subscriptions)} total)"
+        )
+
+        return result
 
 
 # Singleton instance
