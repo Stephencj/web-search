@@ -24,6 +24,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: websearch-app
+    env_file:
+      - .env
     environment:
       - WEBSEARCH_HOST=0.0.0.0
       - WEBSEARCH_PORT=8000
@@ -31,6 +33,10 @@ services:
       - WEBSEARCH_DEBUG=false
       - WEBSEARCH_MEILISEARCH__HOST=http://meilisearch:7700
       - WEBSEARCH_MEILISEARCH__API_KEY=TBmZdGLVexFLTf6Pl1_JZoQt1e07aBt6z-vIF4ldTF8
+      # OAuth settings (set in .env file)
+      # - WEBSEARCH_OAUTH__YOUTUBE_CLIENT_ID=
+      # - WEBSEARCH_OAUTH__YOUTUBE_CLIENT_SECRET=
+      # - WEBSEARCH_OAUTH__ENCRYPTION_KEY=
     volumes:
       - websearch-data:/data
     ports:

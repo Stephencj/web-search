@@ -92,6 +92,16 @@ class YouTubeExtractor:
         Returns:
             List of video URLs
         """
+        # For channel URLs, append /videos to get the videos tab directly
+        # This avoids yt-dlp returning nested playlists (Videos + Shorts tabs)
+        url_type = get_youtube_url_type(url)
+        if url_type == YouTubeUrlType.CHANNEL:
+            # Remove trailing slash and any existing tab suffix
+            clean_url = url.rstrip('/')
+            if not any(clean_url.endswith(tab) for tab in ['/videos', '/shorts', '/streams', '/playlists']):
+                url = f"{clean_url}/videos"
+                logger.debug(f"Appending /videos to channel URL: {url}")
+
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
