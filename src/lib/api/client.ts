@@ -455,6 +455,32 @@ export interface PlaylistSyncResult {
   error: string | null;
 }
 
+// Platform Account types
+export interface PlatformAccount {
+  id: number;
+  platform: string;
+  account_email: string;
+  account_name: string;
+  is_active: boolean;
+  is_premium: boolean;
+  scopes: string | null;
+  token_expires_at: string | null;
+  last_used_at: string | null;
+  last_error: string | null;
+  created_at: string;
+}
+
+export interface OAuthConfigStatus {
+  youtube: boolean;
+}
+
+export interface ImportSubscriptionsResult {
+  imported: number;
+  skipped: number;
+  failed: number;
+  total_found: number;
+}
+
 // Settings types
 export interface SettingValue<T = unknown> {
   value: T;
@@ -1148,6 +1174,19 @@ class ApiClient {
 
   async unfollowPlaylist(id: number): Promise<void> {
     return this.request(`/playlists/${id}`, { method: 'DELETE' });
+  }
+
+  // Platform Accounts (OAuth)
+  async listAccounts(): Promise<PlatformAccount[]> {
+    return this.request('/accounts');
+  }
+
+  async getOAuthConfigStatus(): Promise<OAuthConfigStatus> {
+    return this.request('/accounts/config-status');
+  }
+
+  async importSubscriptionsFromAccount(accountId: number): Promise<ImportSubscriptionsResult> {
+    return this.request(`/accounts/${accountId}/import-subscriptions`, { method: 'POST' });
   }
 }
 
