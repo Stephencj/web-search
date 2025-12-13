@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional, Literal
 
-from fastapi import APIRouter, HTTPException, status, Query
+from fastapi import APIRouter, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy import select, func, desc
 from sqlalchemy.orm import selectinload
 
@@ -294,22 +294,37 @@ async def update_watch_progress(
     return _feed_item_to_response(item)
 
 
-@router.post("/sync", response_model=list[dict])
+async def _run_sync_in_background(platform: Optional[str] = None):
+    """Background task to sync all channels."""
+    from loguru import logger
+    from app.services.feed_sync_service import get_feed_sync_service
+    from app.database import get_session_factory
+
+    logger.info(f"Background sync started (platform={platform})")
+
+    async with get_session_factory()() as db:
+        try:
+            service = get_feed_sync_service()
+            results = await service.sync_all_channels(db, platform=platform)
+            logger.info(f"Background sync complete: {len(results)} channels synced")
+        except Exception as e:
+            logger.exception(f"Background sync failed: {e}")
+
+
+@router.post("/sync")
 async def sync_all_feeds(
-    db: DbSession,
+    background_tasks: BackgroundTasks,
     platform: Optional[str] = Query(None, description="Sync only this platform"),
-) -> list[dict]:
+) -> dict:
     """
     Manually trigger a sync of all channels.
 
-    Fetches new videos from all active channels.
+    Starts a background task to fetch new videos from all active channels.
+    Returns immediately - sync continues in the background.
     """
-    from app.services.feed_sync_service import get_feed_sync_service
+    background_tasks.add_task(_run_sync_in_background, platform)
 
-    service = get_feed_sync_service()
-    results = await service.sync_all_channels(db, platform=platform)
-
-    return results
+    return {"status": "started", "message": "Sync started in background"}
 
 
 @router.get("/stats", response_model=dict)

@@ -4,6 +4,7 @@
   /* Light theme colors (default) */
   --color-bg: #f8f9fa;
   --color-bg-secondary: #ffffff;
+  --color-surface: #ffffff;
   --color-text: #1a1a2e;
   --color-text-secondary: #6c757d;
   --color-primary: #4361ee;
@@ -52,6 +53,7 @@
 :root[data-theme="dark"] {
   --color-bg: #1a1a2e;
   --color-bg-secondary: #16213e;
+  --color-surface: #1e1e3a;
   --color-text: #e8e8e8;
   --color-text-secondary: #a0a0a0;
   --color-border: #2d3748;
@@ -65,6 +67,7 @@
   :root[data-theme="auto"] {
     --color-bg: #1a1a2e;
     --color-bg-secondary: #16213e;
+    --color-surface: #1e1e3a;
     --color-text: #e8e8e8;
     --color-text-secondary: #a0a0a0;
     --color-border: #2d3748;
@@ -78,6 +81,7 @@
 :root[data-theme="light"] {
   --color-bg: #f8f9fa;
   --color-bg-secondary: #ffffff;
+  --color-surface: #ffffff;
   --color-text: #1a1a2e;
   --color-text-secondary: #6c757d;
   --color-border: #dee2e6;

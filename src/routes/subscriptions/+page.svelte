@@ -254,10 +254,12 @@
     syncing = true;
     try {
       await api.syncAllFeeds();
-      await loadChannels();
+      // Sync now runs in background on the server - show brief feedback
+      setTimeout(() => {
+        syncing = false;
+      }, 1500);
     } catch (e) {
       console.error('Sync all failed:', e);
-    } finally {
       syncing = false;
     }
   }
