@@ -65,7 +65,7 @@ class ChannelResponse(BaseModel):
 
 class ChannelListResponse(BaseModel):
     """Schema for listing channels."""
-    channels: list[ChannelResponse]
+    items: list[ChannelResponse]
     total: int
 
 
@@ -85,3 +85,23 @@ class SyncResult(BaseModel):
     success: bool
     new_videos: int = 0
     error: Optional[str] = None
+
+
+class ChannelSearchResult(BaseModel):
+    """A single channel search result."""
+    platform: Literal["youtube", "rumble"]
+    channel_id: str
+    channel_url: str
+    name: str
+    description: Optional[str] = None
+    avatar_url: Optional[str] = None
+    subscriber_count: Optional[int] = None
+    video_count: Optional[int] = None
+
+
+class ChannelSearchResponse(BaseModel):
+    """Response for channel search."""
+    query: str
+    platform: str
+    results: list[ChannelSearchResult]
+    total: int

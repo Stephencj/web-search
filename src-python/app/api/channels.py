@@ -15,8 +15,11 @@ from app.schemas.channel import (
     ChannelImportTakeout,
     ImportResult,
     SyncResult,
+    ChannelSearchResult,
+    ChannelSearchResponse,
 )
 from app.services.channel_service import get_channel_service
+from app.services.channel_search_service import search_youtube_channels, search_rumble_channels
 
 router = APIRouter()
 
@@ -57,9 +60,45 @@ async def list_channels(
     channels = await service.list_channels(db, platform=platform, is_active=is_active)
 
     return ChannelListResponse(
-        channels=[_channel_to_response(c) for c in channels],
+        items=[_channel_to_response(c) for c in channels],
         total=len(channels),
     )
+
+
+@router.get("/search", response_model=ChannelSearchResponse)
+async def search_channels(
+    query: str = Query(..., min_length=2, description="Search query"),
+    platform: str = Query("youtube", description="Platform to search (youtube, rumble)"),
+    limit: int = Query(10, ge=1, le=50, description="Maximum results to return"),
+) -> ChannelSearchResponse:
+    """
+    Search for channels by name on YouTube or Rumble.
+
+    This allows users to find and subscribe to channels without needing the exact URL.
+    """
+    if platform not in ("youtube", "rumble"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Platform must be 'youtube' or 'rumble'",
+        )
+
+    try:
+        if platform == "youtube":
+            results = await search_youtube_channels(query, limit)
+        else:
+            results = await search_rumble_channels(query, limit)
+
+        return ChannelSearchResponse(
+            query=query,
+            platform=platform,
+            results=results,
+            total=len(results),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Search failed: {str(e)}",
+        )
 
 
 @router.post("", response_model=ChannelResponse, status_code=status.HTTP_201_CREATED)

@@ -24,6 +24,17 @@
   let editDescription = $state('');
   let savingIndex = $state(false);
 
+  // Edit source modal
+  let showEditSource = $state(false);
+  let editingSource = $state<Source | null>(null);
+  let editSourceName = $state('');
+  let editSourceDepth = $state(2);
+  let editSourceFrequency = $state<'hourly' | 'daily' | 'weekly' | 'monthly'>('daily');
+  let editSourceCrawlMode = $state<'text_only' | 'images_only' | 'videos_only' | 'text_images' | 'text_videos' | 'images_videos' | 'all'>('all');
+  let editSourceMaxPages = $state(1000);
+  let editSourceActive = $state(true);
+  let savingSource = $state(false);
+
   $effect(() => {
     const id = $page.params.id;
     if (id) {
@@ -135,6 +146,40 @@
     }
   }
 
+  function openEditSource(source: Source) {
+    editingSource = source;
+    editSourceName = source.name || '';
+    editSourceDepth = source.crawl_depth;
+    editSourceFrequency = source.crawl_frequency;
+    editSourceCrawlMode = source.crawl_mode;
+    editSourceMaxPages = source.max_pages;
+    editSourceActive = source.is_active;
+    showEditSource = true;
+  }
+
+  async function saveSource() {
+    if (!editingSource) return;
+
+    savingSource = true;
+    try {
+      const updated = await api.updateSource(editingSource.id, {
+        name: editSourceName.trim() || undefined,
+        crawl_depth: editSourceDepth,
+        crawl_frequency: editSourceFrequency,
+        crawl_mode: editSourceCrawlMode,
+        max_pages: editSourceMaxPages,
+        is_active: editSourceActive,
+      });
+      sources = sources.map(s => s.id === updated.id ? updated : s);
+      showEditSource = false;
+      editingSource = null;
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to update source';
+    } finally {
+      savingSource = false;
+    }
+  }
+
   function formatDate(dateStr: string | null): string {
     if (!dateStr) return 'Never';
     return new Date(dateStr).toLocaleDateString();
@@ -241,6 +286,12 @@
                   Last crawl: {formatDate(source.last_crawl_at)}
                 </span>
                 <div class="source-actions">
+                  <button
+                    class="btn btn-secondary btn-sm"
+                    onclick={() => openEditSource(source)}
+                  >
+                    Edit
+                  </button>
                   <button
                     class="btn btn-secondary btn-sm"
                     onclick={() => startCrawl([source.id])}
@@ -399,6 +450,93 @@
           </button>
           <button type="submit" class="btn btn-primary" disabled={savingIndex || !editName.trim()}>
             {savingIndex ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+{/if}
+
+<!-- Edit Source Modal -->
+{#if showEditSource && editingSource}
+  <div class="modal-overlay">
+    <div class="modal card">
+      <h2>Edit Source</h2>
+      <p class="modal-description">Update source settings for {editingSource.display_name}</p>
+
+      <form onsubmit={(e) => { e.preventDefault(); saveSource(); }}>
+        <div class="form-group">
+          <label for="editSourceName">Display Name (optional)</label>
+          <input
+            id="editSourceName"
+            type="text"
+            class="input"
+            placeholder="e.g., Example Blog"
+            bind:value={editSourceName}
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="editCrawlMode">Content to Index</label>
+          <select id="editCrawlMode" class="input" bind:value={editSourceCrawlMode}>
+            <option value="all">All (text, images, and videos)</option>
+            <option value="text_only">Text only</option>
+            <option value="images_only">Images only</option>
+            <option value="videos_only">Videos only</option>
+            <option value="text_images">Text + Images</option>
+            <option value="text_videos">Text + Videos</option>
+            <option value="images_videos">Images + Videos</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="editDepth">Crawl Depth</label>
+            <select id="editDepth" class="input" bind:value={editSourceDepth}>
+              <option value={1}>1 level</option>
+              <option value={2}>2 levels</option>
+              <option value={3}>3 levels</option>
+              <option value={4}>4 levels</option>
+              <option value={5}>5 levels</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="editFrequency">Crawl Frequency</label>
+            <select id="editFrequency" class="input" bind:value={editSourceFrequency}>
+              <option value="hourly">Hourly</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="editMaxPages">Max Pages</label>
+          <input
+            id="editMaxPages"
+            type="number"
+            class="input"
+            min="1"
+            max="100000"
+            bind:value={editSourceMaxPages}
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" bind:checked={editSourceActive} />
+            <span>Active (source will be crawled on schedule)</span>
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick={() => { showEditSource = false; editingSource = null; }}>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-primary" disabled={savingSource}>
+            {savingSource ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </form>
@@ -678,5 +816,18 @@
     justify-content: flex-end;
     gap: var(--spacing-sm);
     margin-top: var(--spacing-lg);
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    cursor: pointer;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
   }
 </style>
