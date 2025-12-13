@@ -41,6 +41,9 @@ aiolimiter>=1.1.0
 # External APIs
 google-api-python-client>=2.114.0
 
+# Security / OAuth
+cryptography>=41.0.0
+
 # Utilities
 python-dotenv>=1.0.0
 loguru>=0.7.0
