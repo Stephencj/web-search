@@ -117,8 +117,12 @@ async def oauth_callback(
 
     This is called by the OAuth provider after user authorization.
     Exchanges the authorization code for tokens and stores them.
+    Automatically imports subscriptions for YouTube accounts.
     Redirects to frontend with success/error status.
     """
+    from loguru import logger
+    import asyncio
+
     # Base redirect URL (frontend settings page)
     base_redirect = "/settings"
 
@@ -138,9 +142,24 @@ async def oauth_callback(
             status_code=status.HTTP_302_FOUND,
         )
 
-    # Success - redirect with account info
+    # Auto-import subscriptions for YouTube accounts (run in background)
+    import_result = None
+    if platform == "youtube":
+        try:
+            logger.info(f"Starting auto-import of YouTube subscriptions for {account.account_email}")
+            import_result = await service.import_youtube_subscriptions(db, account)
+            logger.info(f"Auto-import complete: {import_result}")
+        except Exception as e:
+            logger.error(f"Auto-import failed: {e}")
+            # Don't fail the login if import fails
+
+    # Success - redirect with account info and import stats
+    redirect_url = f"{base_redirect}?oauth_success=true&platform={platform}&email={account.account_email}"
+    if import_result:
+        redirect_url += f"&imported={import_result.get('imported', 0)}&skipped={import_result.get('skipped', 0)}"
+
     return RedirectResponse(
-        url=f"{base_redirect}?oauth_success=true&platform={platform}&email={account.account_email}",
+        url=redirect_url,
         status_code=status.HTTP_302_FOUND,
     )
 
