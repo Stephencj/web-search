@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api import indexes, sources, search, crawl, settings, collections, channels, feed
+from app.api import indexes, sources, search, crawl, settings, collections, channels, feed, discover
 
 api_router = APIRouter()
 
@@ -14,3 +14,4 @@ api_router.include_router(settings.router, prefix="/settings", tags=["settings"]
 api_router.include_router(collections.router, prefix="/collections", tags=["collections"])
 api_router.include_router(channels.router, prefix="/channels", tags=["channels"])
 api_router.include_router(feed.router, prefix="/feed", tags=["feed"])
+api_router.include_router(discover.router, prefix="/discover", tags=["discover"])

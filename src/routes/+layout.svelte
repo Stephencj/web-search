@@ -17,6 +17,7 @@
   // Get current page title for mobile header
   function getPageTitle(pathname: string): string {
     if (pathname === '/') return 'Search';
+    if (pathname.startsWith('/discover')) return 'Discover';
     if (pathname.startsWith('/feed')) return 'Feed';
     if (pathname.startsWith('/subscriptions')) return 'Subscriptions';
     if (pathname.startsWith('/collections')) return 'Collections';
