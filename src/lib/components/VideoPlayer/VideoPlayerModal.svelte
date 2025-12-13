@@ -1,0 +1,355 @@
+<script lang="ts">
+  import { videoPlayer, formatDuration } from '$lib/stores/videoPlayer.svelte';
+  import { getPlatformName, getPlatformColor } from '$lib/utils/embedUrl';
+  import EmbedFallback from './EmbedFallback.svelte';
+
+  interface Props {
+    onMarkWatched?: () => void;
+  }
+
+  let { onMarkWatched }: Props = $props();
+
+  let iframeLoaded = $state(false);
+  let iframeError = $state(false);
+
+  // Computed values
+  const video = $derived(videoPlayer.currentVideo);
+  const isOpen = $derived(videoPlayer.isModal && video !== null);
+  const embedUrl = $derived(video?.embedConfig.embedUrl);
+  const canEmbed = $derived(video?.embedConfig.supportsEmbed && !iframeError);
+  const platformName = $derived(video ? getPlatformName(video.platform) : '');
+  const platformColor = $derived(video ? getPlatformColor(video.platform) : '#666');
+
+  function handleClose() {
+    videoPlayer.close();
+    iframeLoaded = false;
+    iframeError = false;
+  }
+
+  function handleSwitchToPiP() {
+    videoPlayer.switchToPiP();
+  }
+
+  function handleBackdropClick(event: MouseEvent) {
+    if (event.target === event.currentTarget) {
+      handleClose();
+    }
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      handleClose();
+    } else if (event.key === 'p' || event.key === 'P') {
+      handleSwitchToPiP();
+    }
+  }
+
+  function handleIframeLoad() {
+    iframeLoaded = true;
+  }
+
+  function handleIframeError() {
+    iframeError = true;
+  }
+
+  // Reset state when video changes
+  $effect(() => {
+    if (video) {
+      iframeLoaded = false;
+      iframeError = false;
+      onMarkWatched?.();
+    }
+  });
+</script>
+
+<svelte:window onkeydown={handleKeydown} />
+
+{#if isOpen && video}
+  <div
+    class="player-overlay"
+    onclick={handleBackdropClick}
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="video-title"
+  >
+    <div class="player-modal">
+      <!-- Header -->
+      <div class="player-header">
+        <div class="header-left">
+          <span class="platform-badge" style="background-color: {platformColor}">
+            {platformName}
+          </span>
+          {#if video.duration}
+            <span class="duration">{formatDuration(video.duration)}</span>
+          {/if}
+        </div>
+        <div class="header-right">
+          <button
+            class="header-btn pip-btn"
+            onclick={handleSwitchToPiP}
+            title="Picture in Picture (P)"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+              <path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/>
+            </svg>
+          </button>
+          <button
+            class="header-btn close-btn"
+            onclick={handleClose}
+            title="Close (Escape)"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Video Content -->
+      <div class="player-content">
+        {#if canEmbed && embedUrl}
+          <div class="iframe-container">
+            {#if !iframeLoaded}
+              <div class="loading-spinner">
+                <div class="spinner"></div>
+              </div>
+            {/if}
+            <iframe
+              src={embedUrl}
+              title={video.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowfullscreen
+              onload={handleIframeLoad}
+              onerror={handleIframeError}
+              class:loaded={iframeLoaded}
+            ></iframe>
+          </div>
+        {:else}
+          <EmbedFallback
+            {video}
+            reason={video.embedConfig.fallbackReason}
+          />
+        {/if}
+      </div>
+
+      <!-- Video Info -->
+      <div class="player-info">
+        <h2 id="video-title" class="video-title">{video.title}</h2>
+        <div class="video-meta">
+          {#if video.channelName}
+            {#if video.channelUrl}
+              <a href={video.channelUrl} target="_blank" rel="noopener noreferrer" class="channel-link">
+                {video.channelName}
+              </a>
+            {:else}
+              <span class="channel-name">{video.channelName}</span>
+            {/if}
+          {/if}
+          <a
+            href={video.videoUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="external-link"
+          >
+            Open on {platformName}
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .player-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: var(--spacing-lg);
+  }
+
+  .player-modal {
+    width: 100%;
+    max-width: 1200px;
+    max-height: 90vh;
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Header */
+  .player-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+  }
+
+  .platform-badge {
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .duration {
+    color: var(--color-text-secondary);
+    font-size: 0.875rem;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+
+  .header-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-text-secondary);
+    padding: var(--spacing-xs);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s, background 0.2s;
+  }
+
+  .header-btn:hover {
+    color: var(--color-text);
+    background: var(--color-bg-secondary);
+  }
+
+  /* Video Content */
+  .player-content {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: black;
+  }
+
+  .iframe-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .iframe-container iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .iframe-container iframe.loaded {
+    opacity: 1;
+  }
+
+  .loading-spinner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: black;
+  }
+
+  .spinner {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Video Info */
+  .player-info {
+    padding: var(--spacing-md);
+    background: var(--color-bg-secondary);
+  }
+
+  .video-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 var(--spacing-sm) 0;
+    color: var(--color-text);
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .video-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    font-size: 0.875rem;
+  }
+
+  .channel-link,
+  .channel-name {
+    color: var(--color-text-secondary);
+  }
+
+  .channel-link:hover {
+    color: var(--color-primary);
+  }
+
+  .external-link {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .external-link:hover {
+    text-decoration: underline;
+  }
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    .player-overlay {
+      padding: 0;
+      align-items: flex-start;
+    }
+
+    .player-modal {
+      max-width: 100%;
+      max-height: 100vh;
+      border-radius: 0;
+    }
+
+    .video-title {
+      font-size: 1rem;
+    }
+
+    .video-meta {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--spacing-xs);
+    }
+  }
+</style>
