@@ -49,6 +49,8 @@
   const shouldUseYtApi = $derived(isYouTube && useYouTubeApi && canEmbed && !hasDirectStream);
   const videoKey = $derived(videoPlayer.videoKey);
   const savedPlayhead = $derived(videoPlayer.savedPlayhead);
+  const theaterMode = $derived(playbackPreferences.theaterMode);
+  const backgroundPlayback = $derived(playbackPreferences.backgroundPlayback);
 
   function handleClose() {
     // Clean up YouTube player
@@ -101,6 +103,28 @@
     }
     videoPlayer.savePlayhead(currentTime);
     videoPlayer.switchToPiP();
+  }
+
+  function toggleTheaterMode() {
+    playbackPreferences.toggleTheaterMode();
+  }
+
+  /**
+   * Request native browser PiP for background audio playback
+   * This allows audio to continue when screen is off on mobile
+   */
+  async function requestNativePiP() {
+    if (!videoElement) return false;
+
+    try {
+      if (document.pictureInPictureEnabled && !document.pictureInPictureElement) {
+        await videoElement.requestPictureInPicture();
+        return true;
+      }
+    } catch (e) {
+      console.warn('[Modal] Native PiP request failed:', e);
+    }
+    return false;
   }
 
   function handleBackdropClick(event: MouseEvent) {
@@ -198,6 +222,8 @@
       handleClose();
     } else if (event.key === 'p' || event.key === 'P') {
       handleSwitchToPiP();
+    } else if (event.key === 't' || event.key === 'T') {
+      toggleTheaterMode();
     } else if (event.key === 'ArrowLeft' && hasPrevious) {
       handlePrevious();
     } else if (event.key === 'ArrowRight' && hasNext) {
@@ -297,7 +323,7 @@
     aria-modal="true"
     aria-labelledby="video-title"
   >
-    <div class="player-modal">
+    <div class="player-modal" class:theater={theaterMode}>
       <!-- Header -->
       <div class="player-header">
         <div class="header-left">
@@ -356,9 +382,23 @@
             </button>
           {/if}
           <button
+            class="header-btn theater-btn"
+            class:active={theaterMode}
+            onclick={toggleTheaterMode}
+            title={theaterMode ? 'Exit Theater Mode (T)' : 'Theater Mode (T)'}
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+              {#if theaterMode}
+                <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+              {:else}
+                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+              {/if}
+            </svg>
+          </button>
+          <button
             class="header-btn pip-btn"
             onclick={handleSwitchToPiP}
-            title="Picture in Picture (P)"
+            title="Mini Player (P)"
           >
             <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
               <path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/>
@@ -478,6 +518,19 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    transition: max-width 0.2s ease, max-height 0.2s ease, border-radius 0.2s ease;
+  }
+
+  /* Theater mode - fills the entire screen */
+  .player-modal.theater {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+
+  .player-overlay:has(.player-modal.theater) {
+    padding: 0;
+    background: black;
   }
 
   /* Header */
@@ -587,6 +640,10 @@
     border-color: var(--color-primary);
   }
 
+  .theater-btn.active {
+    color: var(--color-primary);
+  }
+
   .stream-label {
     font-size: 0.75rem;
     font-weight: 500;
@@ -598,6 +655,14 @@
     width: 100%;
     aspect-ratio: 16 / 9;
     background: black;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* In theater mode, video fills available space */
+  .player-modal.theater .player-content {
+    aspect-ratio: unset;
+    height: 100%;
   }
 
   .direct-player {
