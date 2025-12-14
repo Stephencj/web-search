@@ -49,6 +49,8 @@
   const hasDirectStream = $derived(streamInfo?.stream_url && useDirectStream);
   const isYouTube = $derived(video?.platform === 'youtube');
   const shouldUseYtApi = $derived(isYouTube && useYouTubeApi && canEmbed && !hasDirectStream);
+  const videoKey = $derived(videoPlayer.videoKey);
+  const savedPlayhead = $derived(videoPlayer.savedPlayhead);
 
   const dimensions = $derived(size === 'small' ? { width: 320, height: 180 } : { width: 480, height: 270 });
 
@@ -100,6 +102,16 @@
   }
 
   function handleExpand() {
+    // Save current playhead position before switching
+    let currentTime = 0;
+    if (ytPlayer && ytPlayerReady) {
+      try {
+        currentTime = ytPlayer.getCurrentTime();
+      } catch {}
+    } else if (videoElement) {
+      currentTime = videoElement.currentTime;
+    }
+    videoPlayer.savePlayhead(currentTime);
     videoPlayer.switchToModal();
   }
 
@@ -114,6 +126,8 @@
     if (!video || video.platform !== 'youtube') return;
 
     ytApiLoading = true;
+    ytPlayerReady = false;
+
     try {
       await loadYouTubeAPI();
 
@@ -125,13 +139,29 @@
         ytPlayer = null;
       }
 
-      // Small delay to ensure DOM is ready
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for DOM element to exist
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const container = document.getElementById('pip-yt-player-container');
+      if (!container) {
+        console.warn('[PiP] YouTube player container not found');
+        useYouTubeApi = false;
+        return;
+      }
+
+      const startTime = savedPlayhead;
 
       ytPlayer = createYouTubePlayer('pip-yt-player-container', video.videoId, {
         onReady: () => {
           ytPlayerReady = true;
           console.log('[PiP] YouTube player ready');
+          // Seek to saved position if any
+          if (startTime > 0 && ytPlayer) {
+            try {
+              ytPlayer.seekTo(startTime, true);
+              videoPlayer.clearSavedPlayhead();
+            } catch {}
+          }
         },
         onEnded: () => {
           console.log('[PiP] YouTube video ended');
@@ -221,8 +251,18 @@
 
   // Initialize YouTube API player for YouTube videos
   $effect(() => {
+    // Use videoKey to force re-init when video changes
+    const key = videoKey;
     if (isOpen && shouldUseYtApi && video) {
       initYouTubePlayer();
+    }
+  });
+
+  // Restore playhead for direct video element
+  $effect(() => {
+    if (videoElement && savedPlayhead > 0 && hasDirectStream) {
+      videoElement.currentTime = savedPlayhead;
+      videoPlayer.clearSavedPlayhead();
     }
   });
 
