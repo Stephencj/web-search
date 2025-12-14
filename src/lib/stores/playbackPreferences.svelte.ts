@@ -6,12 +6,14 @@
 
 export interface PlaybackPreferences {
   backgroundPlayback: boolean;
+  theaterMode: boolean; // Fill the entire screen
 }
 
 const STORAGE_KEY = 'websearch-playback-preferences';
 
 const defaults: PlaybackPreferences = {
-  backgroundPlayback: false,
+  backgroundPlayback: true, // Default on for playlist listening
+  theaterMode: true, // Default to fullscreen-like view
 };
 
 /**
@@ -60,6 +62,13 @@ function createPlaybackPreferencesStore() {
     },
 
     /**
+     * Get whether theater mode (fullscreen-like) is enabled
+     */
+    get theaterMode() {
+      return preferences.theaterMode;
+    },
+
+    /**
      * Get all preferences
      */
     get all() {
@@ -75,10 +84,25 @@ function createPlaybackPreferencesStore() {
     },
 
     /**
+     * Set theater mode preference
+     */
+    setTheaterMode(enabled: boolean) {
+      preferences = { ...preferences, theaterMode: enabled };
+      savePreferences(preferences);
+    },
+
+    /**
      * Toggle background playback
      */
     toggleBackgroundPlayback() {
       this.setBackgroundPlayback(!preferences.backgroundPlayback);
+    },
+
+    /**
+     * Toggle theater mode
+     */
+    toggleTheaterMode() {
+      this.setTheaterMode(!preferences.theaterMode);
     },
 
     /**

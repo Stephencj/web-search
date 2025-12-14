@@ -306,13 +306,28 @@
         <div class="setting-row">
           <div class="setting-info">
             <label>Background Playback</label>
-            <p class="setting-help">Continue playing videos when you switch tabs or minimize the browser</p>
+            <p class="setting-help">Continue playing videos when you switch tabs or turn off screen (uses native PiP for audio)</p>
           </div>
           <label class="toggle-switch">
             <input
               type="checkbox"
               checked={playbackPreferences.backgroundPlayback}
               onchange={() => playbackPreferences.toggleBackgroundPlayback()}
+            />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Theater Mode</label>
+            <p class="setting-help">Video fills the entire screen by default (press T to toggle)</p>
+          </div>
+          <label class="toggle-switch">
+            <input
+              type="checkbox"
+              checked={playbackPreferences.theaterMode}
+              onchange={() => playbackPreferences.toggleTheaterMode()}
             />
             <span class="toggle-slider"></span>
           </label>
