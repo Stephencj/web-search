@@ -80,9 +80,9 @@
       const response = await fetch(`/api/stream/${video.platform}/${video.videoId}`);
       if (response.ok) {
         streamInfo = await response.json();
-        console.log('[PiP] Stream info:', streamInfo?.is_premium ? 'Premium' : 'Standard', streamInfo?.quality || 'N/A');
-        // Auto-enable direct stream if available and premium
-        if (streamInfo?.stream_url && streamInfo?.is_premium) {
+        console.log('[PiP] Stream info:', streamInfo?.stream_url ? 'Available' : 'N/A', streamInfo?.quality || '');
+        // Auto-enable direct stream if available (better for background playback)
+        if (streamInfo?.stream_url) {
           useDirectStream = true;
         }
       } else {

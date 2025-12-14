@@ -174,35 +174,33 @@ async def _extract_youtube_stream(
     """
     import yt_dlp
 
-    # Quality mapping
-    quality_formats = {
-        "best": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "1080p": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best",
-        "720p": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best",
-        "480p": "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best",
-        "worst": "worstvideo[ext=mp4]+worstaudio[ext=m4a]/worst[ext=mp4]/worst",
-        "audio": "bestaudio[ext=m4a]/bestaudio",
-    }
-
+    # Use simple format selection - let yt-dlp choose the best available
+    # For browser playback we need formats that work without merging
     if audio_only:
-        format_str = quality_formats["audio"]
+        format_str = "bestaudio/best"
+    elif quality == "1080p":
+        format_str = "best[height<=1080]/best"
+    elif quality == "720p":
+        format_str = "best[height<=720]/best"
+    elif quality == "480p":
+        format_str = "best[height<=480]/best"
+    elif quality == "worst":
+        format_str = "worst"
     else:
-        format_str = quality_formats.get(quality, quality_formats["best"])
+        format_str = "best"
 
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "format": format_str,
         "skip_download": True,
+        # Required for YouTube to return proper formats
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
     }
 
-    # Add OAuth token if available
-    # Note: yt-dlp supports OAuth via cookies, but direct token injection
-    # requires custom handling. For now, we pass the token as a header.
-    if access_token:
-        ydl_opts["http_headers"] = {
-            "Authorization": f"Bearer {access_token}",
-        }
+    # Note: OAuth tokens don't work directly with yt-dlp for YouTube
+    # Authentication would require browser cookies export
+    _ = access_token  # Unused for now
 
     def extract():
         try:

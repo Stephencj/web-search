@@ -77,6 +77,11 @@
       const response = await fetch(`/api/stream/${video.platform}/${video.videoId}`);
       if (response.ok) {
         streamInfo = await response.json();
+        console.log('[Modal] Stream info:', streamInfo?.stream_url ? 'Available' : 'N/A', streamInfo?.quality || '');
+        // Auto-enable direct stream if available (better for background playback)
+        if (streamInfo?.stream_url) {
+          useDirectStream = true;
+        }
       }
     } catch {
       // Stream API not available, continue with embed
