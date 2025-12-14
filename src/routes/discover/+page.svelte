@@ -144,8 +144,14 @@
   }
 
   function playVideo(video: DiscoverVideoResult) {
-    const videoItem = discoverVideoToVideoItem(video);
-    videoPlayer.openModal(videoItem);
+    // Build queue from all video results for auto-advance
+    const videoQueue = videoResults.map(v => discoverVideoToVideoItem(v));
+    const videoIndex = videoResults.findIndex(v =>
+      v.platform === video.platform && v.video_id === video.video_id
+    );
+
+    // Open with queue for auto-advance
+    videoPlayer.openWithQueue(videoQueue, videoIndex >= 0 ? videoIndex : 0);
   }
 
   function formatCount(count: number | null): string {
