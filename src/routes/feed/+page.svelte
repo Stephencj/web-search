@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
   import {
     api,
@@ -13,6 +13,12 @@
   import { feedPreferences } from '$lib/stores/feedPreferences.svelte';
   import FeedModeSelector from '$lib/components/FeedModeSelector/FeedModeSelector.svelte';
   import SaveButton from '$lib/components/SaveButton/SaveButton.svelte';
+
+  // Auto-refresh settings
+  const AUTO_REFRESH_INTERVAL = 30000; // 30 seconds
+  let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  let lastKnownTotal = $state(0);
+  let newItemsAvailable = $state(0);
 
   // View mode
   let viewMode = $state<'chronological' | 'by_channel'>('chronological');
@@ -56,7 +62,53 @@
     }
     loadFeed();
     loadStats();
+
+    // Start auto-refresh polling
+    startAutoRefresh();
+
+    return () => {
+      stopAutoRefresh();
+    };
   });
+
+  onDestroy(() => {
+    stopAutoRefresh();
+  });
+
+  function startAutoRefresh() {
+    if (autoRefreshTimer) return;
+    autoRefreshTimer = setInterval(checkForNewItems, AUTO_REFRESH_INTERVAL);
+  }
+
+  function stopAutoRefresh() {
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+  }
+
+  async function checkForNewItems() {
+    // Light-weight check - only fetch stats to see if total changed
+    try {
+      const newStats = await api.getFeedStats();
+      if (newStats && stats) {
+        const newTotal = newStats.total_videos;
+        if (lastKnownTotal > 0 && newTotal > lastKnownTotal) {
+          newItemsAvailable = newTotal - lastKnownTotal;
+        }
+        stats = newStats;
+      }
+    } catch (e) {
+      // Silently fail - don't disrupt user experience
+      console.debug('Auto-refresh check failed:', e);
+    }
+  }
+
+  function loadNewItems() {
+    newItemsAvailable = 0;
+    loadFeed();
+    loadStats();
+  }
 
   // Handle mode change
   function handleModeChange(mode: FeedMode | null) {
@@ -142,6 +194,9 @@
   async function loadStats() {
     try {
       stats = await api.getFeedStats();
+      if (stats) {
+        lastKnownTotal = stats.total_videos;
+      }
     } catch (e) {
       console.error('Failed to load stats:', e);
     }
@@ -293,6 +348,16 @@
     </div>
   </header>
 
+  <!-- New Items Available Banner -->
+  {#if newItemsAvailable > 0}
+    <button class="new-items-banner" onclick={loadNewItems}>
+      <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+        <path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z" />
+      </svg>
+      {newItemsAvailable} new {newItemsAvailable === 1 ? 'video' : 'videos'} available - Click to load
+    </button>
+  {/if}
+
   <!-- Filters and View Toggle -->
   <div class="controls">
     <div class="view-toggle">
@@ -419,6 +484,9 @@
             </div>
             <div class="card-content">
               <h3 class="video-title" title={item.title}>{item.title}</h3>
+              {#if item.description}
+                <p class="video-description">{item.description.slice(0, 100)}{item.description.length > 100 ? '...' : ''}</p>
+              {/if}
               <div class="video-meta">
                 <span class="channel-name">{item.channel_name}</span>
                 <span class="separator">·</span>
@@ -557,6 +625,34 @@
     display: flex;
     align-items: center;
     gap: var(--spacing-xs);
+  }
+
+  .new-items-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    background: linear-gradient(135deg, var(--color-primary) 0%, #6366f1 100%);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    cursor: pointer;
+    animation: pulse 2s infinite;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .new-items-banner:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(67, 97, 238, 0.4);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
   }
 
   .controls {
@@ -796,6 +892,17 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     line-height: 1.4;
+  }
+
+  .video-description {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+    margin: 0 0 var(--spacing-xs);
   }
 
   .video-meta {

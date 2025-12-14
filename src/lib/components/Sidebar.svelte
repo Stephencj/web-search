@@ -19,6 +19,7 @@
     { href: '/discover', label: 'Discover', icon: '🌐' },
     { href: '/saved', label: 'Saved', icon: '💾' },
     { href: '/feed', label: 'Feed', icon: '📺' },
+    { href: '/history', label: 'History', icon: '⏱️' },
     { href: '/subscriptions', label: 'Subscriptions', icon: '🔔' },
     { href: '/collections', label: 'Collections', icon: '📁' },
     { href: '/indexes', label: 'Indexes', icon: '📚' },

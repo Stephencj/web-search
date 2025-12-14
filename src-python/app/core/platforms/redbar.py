@@ -219,6 +219,67 @@ class RedBarPlatform(PlatformAdapter):
                 if episodes:
                     break
 
+            # If no containers found, try parsing h2 links directly (search results page)
+            if not episodes:
+                # Red Bar search results use simple h2 > a structure
+                h2_links = soup.select("h2 a[href], h3 a[href]")
+                for link in h2_links[:max_results]:
+                    href = link.get("href", "")
+                    if not href:
+                        continue
+
+                    # Skip non-content links
+                    if any(skip in href.lower() for skip in ["/user/", "/login", "/register", "javascript:"]):
+                        continue
+
+                    # Must be a redbarradio.net link or relative path
+                    if href.startswith("http") and "redbarradio.net" not in href:
+                        continue
+
+                    if not href.startswith("http"):
+                        href = urljoin(self.BASE_URL, href)
+
+                    video_id = self._extract_episode_id(href)
+                    if not video_id:
+                        continue
+
+                    title = link.get_text(strip=True)
+                    if not title or len(title) < 3:
+                        continue
+
+                    # Try to find date near the link
+                    upload_date = None
+                    parent = link.find_parent()
+                    if parent:
+                        # Look for date pattern in nearby text
+                        parent_text = parent.get_text()
+                        date_match = re.search(
+                            r"(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})",
+                            parent_text,
+                            re.IGNORECASE
+                        )
+                        if date_match:
+                            upload_date = self._parse_date(date_match.group(1))
+
+                    results.append(VideoResult(
+                        platform=self.platform_id,
+                        video_id=video_id,
+                        video_url=href,
+                        title=title,
+                        description=None,
+                        thumbnail_url=None,
+                        duration_seconds=None,
+                        upload_date=upload_date,
+                        channel_name="Red Bar Radio",
+                        channel_id="redbarradio",
+                        channel_url=self.BASE_URL,
+                    ))
+
+                    if len(results) >= max_results:
+                        break
+
+                return results
+
             for item in episodes[:max_results]:
                 try:
                     episode = self._parse_episode_item(item)

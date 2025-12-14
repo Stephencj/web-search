@@ -49,6 +49,10 @@
   let redbarPassword = $state('');
   let redbarError = $state<string | null>(null);
 
+  // Maintenance state
+  let fixingMetadata = $state(false);
+  let metadataFixMessage = $state<string | null>(null);
+
   // Theme options
   const themeOptions: { value: Theme; label: string; icon: string }[] = [
     { value: 'light', label: 'Light', icon: '☀️' },
@@ -175,6 +179,21 @@
     } finally {
       redbarLoading = false;
       setTimeout(() => saveMessage = null, 5000);
+    }
+  }
+
+  async function handleFixMetadata() {
+    fixingMetadata = true;
+    metadataFixMessage = 'Starting metadata fix...';
+    try {
+      const result = await api.fixFeedMetadata(200);
+      metadataFixMessage = result.message + ' (running in background)';
+      setTimeout(() => metadataFixMessage = null, 15000);
+    } catch (e) {
+      metadataFixMessage = 'Error: ' + (e instanceof Error ? e.message : 'Failed to fix metadata');
+      setTimeout(() => metadataFixMessage = null, 8000);
+    } finally {
+      fixingMetadata = false;
     }
   }
 
@@ -768,6 +787,29 @@
           />
         </div>
       </section>
+
+      <!-- Maintenance -->
+      <section class="settings-section card">
+        <h2>Maintenance</h2>
+        <p class="section-description">Tools to fix data issues</p>
+
+        <div class="maintenance-item">
+          <div class="maintenance-info">
+            <h3>Fix Video Dates</h3>
+            <p>Some videos may show incorrect upload dates (e.g., "Today" for old videos). This fetches accurate dates from YouTube.</p>
+            {#if metadataFixMessage}
+              <p class="metadata-fix-status">{metadataFixMessage}</p>
+            {/if}
+          </div>
+          <button
+            class="btn btn-secondary"
+            onclick={handleFixMetadata}
+            disabled={fixingMetadata}
+          >
+            {fixingMetadata ? 'Starting...' : 'Fix Dates'}
+          </button>
+        </div>
+      </section>
     </div>
   {/if}
 </div>
@@ -1292,8 +1334,44 @@
     opacity: 0.9;
   }
 
+  /* Maintenance */
+  .maintenance-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--spacing-lg);
+    padding: var(--spacing-md);
+    background: var(--color-bg);
+    border-radius: var(--radius-md);
+  }
+
+  .maintenance-info h3 {
+    margin: 0 0 var(--spacing-xs) 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  .maintenance-info p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+  }
+
+  .metadata-fix-status {
+    margin-top: var(--spacing-sm) !important;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: rgba(67, 97, 238, 0.1);
+    border-radius: var(--radius-sm);
+    color: var(--color-primary) !important;
+    font-weight: 500;
+  }
+
   /* Mobile */
   @media (max-width: 768px) {
+    .settings-page {
+      max-width: 100%;
+    }
+
     .setting-row {
       flex-direction: column;
       align-items: flex-start;
@@ -1311,6 +1389,46 @@
 
     .section-header .btn {
       align-self: flex-start;
+    }
+
+    .accounts-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .api-providers {
+      grid-template-columns: 1fr;
+    }
+
+    .settings-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .redbar-section {
+      padding: var(--spacing-sm);
+    }
+
+    .redbar-header {
+      flex-direction: column;
+      text-align: center;
+    }
+
+    .redbar-logged-in {
+      flex-direction: column;
+      gap: var(--spacing-sm);
+      text-align: center;
+    }
+
+    .redbar-login-form .form-row {
+      flex-direction: column;
+    }
+
+    .redbar-login-form .input {
+      min-width: 100%;
+    }
+
+    .maintenance-item {
+      flex-direction: column;
+      text-align: center;
     }
   }
 </style>

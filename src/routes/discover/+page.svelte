@@ -332,6 +332,9 @@
               <a href={video.video_url} target="_blank" rel="noopener noreferrer" class="video-title">
                 {video.title}
               </a>
+              {#if video.description}
+                <p class="video-description">{video.description.slice(0, 120)}{video.description.length > 120 ? '...' : ''}</p>
+              {/if}
               <div class="video-meta">
                 {#if video.channel_name}
                   <span class="channel-name">{video.channel_name}</span>
@@ -771,6 +774,17 @@
 
   .video-title:hover {
     color: var(--color-primary);
+  }
+
+  .video-description {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+    margin: var(--spacing-xs) 0;
   }
 
   .video-meta {

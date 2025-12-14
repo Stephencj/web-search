@@ -153,7 +153,11 @@ class RedBarAuthService:
 
                 # Check if login was successful
                 # WordPress typically redirects to homepage or dashboard on success
-                cookies = dict(client.cookies)
+                # Handle duplicate cookie names by using the cookie jar properly
+                cookies = {}
+                for cookie in client.cookies.jar:
+                    # Use the last value for each cookie name (most recent)
+                    cookies[cookie.name] = cookie.value
 
                 # Check for authentication cookies
                 auth_cookies = [
@@ -176,7 +180,9 @@ class RedBarAuthService:
                             "Referer": self.LOGIN_URL,
                         },
                     )
-                    cookies = dict(client.cookies)
+                    cookies = {}
+                    for cookie in client.cookies.jar:
+                        cookies[cookie.name] = cookie.value
                     auth_cookies = [
                         c for c in cookies.keys()
                         if "wordpress_logged_in" in c.lower()
