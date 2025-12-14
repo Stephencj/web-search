@@ -488,6 +488,23 @@ export interface ImportSubscriptionsResult {
   total_found: number;
 }
 
+// Red Bar Radio auth types
+export interface RedBarLoginResponse {
+  success: boolean;
+  message: string;
+  account_id?: number;
+  username?: string;
+}
+
+export interface RedBarStatusResponse {
+  logged_in: boolean;
+  username?: string;
+  expires_at?: string;
+  is_premium?: boolean;
+  last_used?: string;
+  error?: string;
+}
+
 // Settings types
 export interface SettingValue<T = unknown> {
   value: T;
@@ -1219,6 +1236,26 @@ class ApiClient {
 
   async importSubscriptionsFromAccount(accountId: number): Promise<ImportSubscriptionsResult> {
     return this.request(`/accounts/${accountId}/import-subscriptions`, { method: 'POST' });
+  }
+
+  // Red Bar Radio (session-based auth)
+  async redbarLogin(username: string, password: string): Promise<RedBarLoginResponse> {
+    return this.request('/accounts/redbar/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+  }
+
+  async getRedbarStatus(): Promise<RedBarStatusResponse> {
+    return this.request('/accounts/redbar/status');
+  }
+
+  async redbarLogout(): Promise<{ success: boolean; message: string }> {
+    return this.request('/accounts/redbar', { method: 'DELETE' });
+  }
+
+  async validateRedbarSession(): Promise<{ valid: boolean }> {
+    return this.request('/accounts/redbar/validate', { method: 'POST' });
   }
 }
 

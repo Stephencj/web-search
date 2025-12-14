@@ -24,6 +24,7 @@
   let loadingStream = $state(false);
   let useDirectStream = $state(false);
   let videoElement: HTMLVideoElement | null = $state(null);
+  let audioElement: HTMLAudioElement | null = $state(null);
 
   // YouTube API player
   let ytPlayer: YouTubePlayer | null = null;
@@ -43,6 +44,7 @@
   const platformColor = $derived(video ? getPlatformColor(video.platform) : '#666');
   const hasDirectStream = $derived(streamInfo?.stream_url && useDirectStream);
   const isYouTube = $derived(video?.platform === 'youtube');
+  const isAudio = $derived(video?.platform === 'redbar');
   const shouldUseYtApi = $derived(isYouTube && useYouTubeApi && canEmbed && !hasDirectStream);
   const videoKey = $derived(videoPlayer.videoKey);
   const savedPlayhead = $derived(videoPlayer.savedPlayhead);
@@ -127,6 +129,9 @@
     if (videoElement) {
       return videoElement.currentTime;
     }
+    if (audioElement) {
+      return audioElement.currentTime;
+    }
     return 0;
   }
 
@@ -141,6 +146,9 @@
     }
     if (videoElement) {
       return videoElement.duration || video?.duration || 0;
+    }
+    if (audioElement) {
+      return audioElement.duration || video?.duration || 0;
     }
     return video?.duration || 0;
   }
@@ -409,6 +417,20 @@
     }
   });
 
+  // Restore playhead for audio element and start progress tracking
+  $effect(() => {
+    if (audioElement && isAudio) {
+      const startTime = getInitialPlayhead();
+      if (startTime > 0) {
+        audioElement.currentTime = startTime;
+        videoPlayer.clearSavedPlayhead();
+        console.log('[PiP] Audio seeking to:', startTime);
+      }
+      // Start progress tracking for audio
+      startProgressTracking();
+    }
+  });
+
   // Cleanup YouTube player and progress tracking when closing or switching modes
   $effect(() => {
     return () => {
@@ -451,7 +473,31 @@
   >
     <!-- Video Content -->
     <div class="pip-content">
-      {#if hasDirectStream && streamInfo?.stream_url}
+      {#if isAudio}
+        <!-- Audio player for podcasts (Red Bar Radio) -->
+        <div class="audio-pip-player">
+          {#if video.thumbnailUrl}
+            <img src={video.thumbnailUrl} alt={video.title} class="audio-thumbnail" />
+          {:else}
+            <div class="audio-placeholder">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              </svg>
+            </div>
+          {/if}
+          <audio
+            bind:this={audioElement}
+            src={video.videoUrl}
+            controls
+            autoplay
+            onended={handleVideoEnded}
+            onplay={startProgressTracking}
+            class="pip-audio"
+          >
+            Your browser does not support audio playback.
+          </audio>
+        </div>
+      {:else if hasDirectStream && streamInfo?.stream_url}
         <!-- Direct stream playback (premium, no ads) -->
         <div class="direct-player">
           <video
@@ -671,6 +717,43 @@
     width: 100%;
     height: 100%;
     background: black;
+  }
+
+  /* Audio PiP Player Styles */
+  .audio-pip-player {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%);
+    position: relative;
+  }
+
+  .audio-thumbnail {
+    width: 100%;
+    height: calc(100% - 40px);
+    object-fit: cover;
+    filter: brightness(0.8);
+  }
+
+  .audio-placeholder {
+    width: 100%;
+    height: calc(100% - 40px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #2d2d44 0%, #1a1a2e 100%);
+    color: var(--color-text-muted);
+  }
+
+  .pip-audio {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.8);
   }
 
   .pip-fallback {

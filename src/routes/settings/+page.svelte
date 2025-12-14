@@ -42,6 +42,13 @@
   let apiKeyModalOpen = $state(false);
   let editingApiKey = $state<ApiKey | null>(null);
 
+  // Red Bar Radio auth state
+  let redbarStatus = $state<{ logged_in: boolean; username?: string; is_premium?: boolean } | null>(null);
+  let redbarLoading = $state(false);
+  let redbarUsername = $state('');
+  let redbarPassword = $state('');
+  let redbarError = $state<string | null>(null);
+
   // Theme options
   const themeOptions: { value: Theme; label: string; icon: string }[] = [
     { value: 'light', label: 'Light', icon: '☀️' },
@@ -89,6 +96,7 @@
         api.listApiKeys(),
         loadPlatformAccounts(),
         loadOAuthConfig(),
+        loadRedbarStatus(),
       ]);
       settings = settingsData;
       apiKeys = keysData;
@@ -118,6 +126,55 @@
       }
     } catch {
       // Silently fail
+    }
+  }
+
+  async function loadRedbarStatus() {
+    try {
+      redbarStatus = await api.getRedbarStatus();
+    } catch {
+      redbarStatus = { logged_in: false };
+    }
+  }
+
+  async function handleRedbarLogin() {
+    if (!redbarUsername || !redbarPassword) {
+      redbarError = 'Please enter username and password';
+      return;
+    }
+
+    redbarLoading = true;
+    redbarError = null;
+
+    try {
+      const result = await api.redbarLogin(redbarUsername, redbarPassword);
+      if (result.success) {
+        saveMessage = { type: 'success', text: 'Successfully logged in to Red Bar Radio' };
+        redbarUsername = '';
+        redbarPassword = '';
+        await loadRedbarStatus();
+      } else {
+        redbarError = result.message;
+      }
+    } catch (e) {
+      redbarError = e instanceof Error ? e.message : 'Login failed';
+    } finally {
+      redbarLoading = false;
+      setTimeout(() => saveMessage = null, 5000);
+    }
+  }
+
+  async function handleRedbarLogout() {
+    redbarLoading = true;
+    try {
+      await api.redbarLogout();
+      redbarStatus = { logged_in: false };
+      saveMessage = { type: 'success', text: 'Logged out of Red Bar Radio' };
+    } catch (e) {
+      redbarError = e instanceof Error ? e.message : 'Logout failed';
+    } finally {
+      redbarLoading = false;
+      setTimeout(() => saveMessage = null, 5000);
     }
   }
 
@@ -346,6 +403,68 @@
             isConfigured={oauthConfig.youtube}
             onAccountChange={loadPlatformAccounts}
           />
+        </div>
+
+        <!-- Red Bar Radio Login -->
+        <div class="redbar-section">
+          <div class="redbar-header">
+            <div class="redbar-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              </svg>
+            </div>
+            <div class="redbar-info">
+              <h3>Red Bar Radio</h3>
+              <p class="redbar-description">Access premium SCARS CLUB content</p>
+            </div>
+          </div>
+
+          {#if redbarStatus?.logged_in}
+            <div class="redbar-logged-in">
+              <div class="redbar-user">
+                <span class="redbar-username">{redbarStatus.username || 'Connected'}</span>
+                {#if redbarStatus.is_premium}
+                  <span class="premium-badge">SCARS CLUB</span>
+                {/if}
+              </div>
+              <button
+                class="btn btn-danger btn-sm"
+                onclick={handleRedbarLogout}
+                disabled={redbarLoading}
+              >
+                {redbarLoading ? 'Logging out...' : 'Logout'}
+              </button>
+            </div>
+          {:else}
+            <form class="redbar-login-form" onsubmit={(e) => { e.preventDefault(); handleRedbarLogin(); }}>
+              <div class="form-row">
+                <input
+                  type="text"
+                  class="input"
+                  placeholder="Username"
+                  bind:value={redbarUsername}
+                  disabled={redbarLoading}
+                />
+                <input
+                  type="password"
+                  class="input"
+                  placeholder="Password"
+                  bind:value={redbarPassword}
+                  disabled={redbarLoading}
+                />
+                <button
+                  type="submit"
+                  class="btn btn-primary"
+                  disabled={redbarLoading || !redbarUsername || !redbarPassword}
+                >
+                  {redbarLoading ? 'Logging in...' : 'Login'}
+                </button>
+              </div>
+              {#if redbarError}
+                <p class="error-message">{redbarError}</p>
+              {/if}
+            </form>
+          {/if}
         </div>
       </section>
 
@@ -936,6 +1055,115 @@
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: var(--spacing-md);
     margin-top: var(--spacing-lg);
+  }
+
+  /* Red Bar Radio Section */
+  .redbar-section {
+    margin-top: var(--spacing-lg);
+    padding: var(--spacing-md);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  .redbar-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+  }
+
+  .redbar-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%);
+    border-radius: var(--radius-md);
+    color: white;
+  }
+
+  .redbar-info h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .redbar-description {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+  }
+
+  .redbar-logged-in {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: var(--radius-md);
+  }
+
+  .redbar-user {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+
+  .redbar-username {
+    font-weight: 500;
+    color: rgb(34, 197, 94);
+  }
+
+  .premium-badge {
+    background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+    color: black;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
+    font-weight: 700;
+  }
+
+  .redbar-login-form {
+    margin-top: var(--spacing-sm);
+  }
+
+  .redbar-login-form .form-row {
+    display: flex;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+  }
+
+  .redbar-login-form .input {
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .redbar-login-form .btn {
+    white-space: nowrap;
+  }
+
+  .redbar-login-form .error-message {
+    margin-top: var(--spacing-sm);
+    color: var(--color-error);
+    font-size: 0.875rem;
+  }
+
+  .btn-danger {
+    background: var(--color-error);
+    color: white;
+    border: none;
+  }
+
+  .btn-danger:hover:not(:disabled) {
+    background: #dc2626;
+  }
+
+  .btn-sm {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 0.875rem;
   }
 
   /* API Providers */
