@@ -1,20 +1,8 @@
 <script lang="ts">
-  import { videoPlayer, formatDuration } from '$lib/stores/videoPlayer.svelte';
+  import { videoPlayer, formatDuration, getCachedStreamInfo, prefetchStreams, type StreamInfo } from '$lib/stores/videoPlayer.svelte';
   import { getPlatformName, getPlatformColor } from '$lib/utils/embedUrl';
   import { loadYouTubeAPI, createYouTubePlayer, type YouTubePlayer } from '$lib/utils/youtubeApi';
   import EmbedFallback from './EmbedFallback.svelte';
-
-  interface StreamInfo {
-    video_id: string;
-    platform: string;
-    title?: string;
-    stream_url?: string;
-    audio_url?: string;
-    is_authenticated: boolean;
-    is_premium: boolean;
-    quality?: string;
-    error?: string;
-  }
 
   // Dragging state
   let isDragging = $state(false);
@@ -74,6 +62,17 @@
 
   async function fetchStreamInfo() {
     if (!video || video.platform !== 'youtube') return;
+
+    // Check cache first (from pre-fetch)
+    const cached = getCachedStreamInfo(video.platform, video.videoId);
+    if (cached) {
+      streamInfo = cached;
+      console.log('[PiP] Using cached stream:', cached.stream_url ? 'Available' : 'N/A', cached.quality || '');
+      if (cached.stream_url) {
+        useDirectStream = true;
+      }
+      return;
+    }
 
     loadingStream = true;
     try {

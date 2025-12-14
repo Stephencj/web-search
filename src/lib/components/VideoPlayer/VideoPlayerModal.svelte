@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { videoPlayer, formatDuration } from '$lib/stores/videoPlayer.svelte';
+  import { videoPlayer, formatDuration, getCachedStreamInfo, prefetchStreams, type StreamInfo } from '$lib/stores/videoPlayer.svelte';
   import { playbackPreferences } from '$lib/stores/playbackPreferences.svelte';
   import { getPlatformName, getPlatformColor } from '$lib/utils/embedUrl';
   import { loadYouTubeAPI, createYouTubePlayer, isYouTubeAPIReady, type YouTubePlayer } from '$lib/utils/youtubeApi';
@@ -7,18 +7,6 @@
 
   interface Props {
     onMarkWatched?: () => void;
-  }
-
-  interface StreamInfo {
-    video_id: string;
-    platform: string;
-    title?: string;
-    stream_url?: string;
-    audio_url?: string;
-    is_authenticated: boolean;
-    is_premium: boolean;
-    quality?: string;
-    error?: string;
   }
 
   let { onMarkWatched }: Props = $props();
@@ -72,6 +60,19 @@
   async function fetchStreamInfo() {
     if (!video || video.platform !== 'youtube') return;
 
+    // Check cache first (from pre-fetch)
+    const cached = getCachedStreamInfo(video.platform, video.videoId);
+    if (cached) {
+      streamInfo = cached;
+      console.log('[Modal] Using cached stream:', cached.stream_url ? 'Available' : 'N/A', cached.quality || '');
+      if (cached.stream_url) {
+        useDirectStream = true;
+      }
+      // Pre-fetch next videos in background
+      prefetchUpcoming();
+      return;
+    }
+
     loadingStream = true;
     try {
       const response = await fetch(`/api/stream/${video.platform}/${video.videoId}`);
@@ -82,11 +83,24 @@
         if (streamInfo?.stream_url) {
           useDirectStream = true;
         }
+        // Pre-fetch next videos in background
+        prefetchUpcoming();
       }
     } catch {
       // Stream API not available, continue with embed
     } finally {
       loadingStream = false;
+    }
+  }
+
+  /**
+   * Pre-fetch stream info for upcoming videos in the queue
+   */
+  function prefetchUpcoming() {
+    const upcoming = videoPlayer.getUpcomingVideos(2);
+    if (upcoming.length > 0) {
+      console.log('[Modal] Pre-fetching', upcoming.length, 'upcoming videos');
+      prefetchStreams(upcoming);
     }
   }
 
