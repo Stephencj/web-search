@@ -524,8 +524,8 @@ async def get_feed_stats(db: DbSession) -> dict:
 @router.get("/history", response_model=FeedResponse)
 async def get_watch_history(
     db: DbSession,
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=50, ge=1, le=200),
     include_completed: bool = Query(default=True, description="Include fully watched videos"),
 ) -> FeedResponse:
     """
@@ -533,7 +533,7 @@ async def get_watch_history(
 
     Returns videos sorted by most recently watched/played first.
     """
-    from sqlalchemy import or_, and_, case
+    from sqlalchemy import or_
 
     # Build query for videos with any watch activity
     query = (
@@ -564,14 +564,18 @@ async def get_watch_history(
     total = total_result.scalar() or 0
 
     # Apply pagination
-    query = query.offset(offset).limit(limit)
+    offset = (page - 1) * per_page
+    query = query.offset(offset).limit(per_page)
 
     result = await db.execute(query)
     items = list(result.scalars().all())
 
+    has_more = (page * per_page) < total
+
     return FeedResponse(
         items=[_feed_item_to_response(item) for item in items],
         total=total,
-        limit=limit,
-        offset=offset,
+        page=page,
+        per_page=per_page,
+        has_more=has_more,
     )

@@ -1049,13 +1049,13 @@ class ApiClient {
   }
 
   async getWatchHistory(params?: {
-    limit?: number;
-    offset?: number;
+    page?: number;
+    per_page?: number;
     include_completed?: boolean;
   }): Promise<FeedResponse> {
     const searchParams = new URLSearchParams();
-    if (params?.limit) searchParams.set('limit', params.limit.toString());
-    if (params?.offset) searchParams.set('offset', params.offset.toString());
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.per_page) searchParams.set('per_page', params.per_page.toString());
     if (params?.include_completed !== undefined) {
       searchParams.set('include_completed', params.include_completed.toString());
     }

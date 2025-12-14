@@ -19,7 +19,7 @@
     error = null;
     try {
       const response = await api.getWatchHistory({
-        limit: 100,
+        per_page: 100,
         include_completed: showCompleted,
       });
       items = response.items;
