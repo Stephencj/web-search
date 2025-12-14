@@ -3,7 +3,7 @@
  * Manages global video playback state for modal and PiP modes
  */
 
-import type { FeedItem, DiscoverVideoResult, SavedVideo } from '$lib/api/client';
+import { api, type FeedItem, type DiscoverVideoResult, type SavedVideo } from '$lib/api/client';
 import { buildEmbedConfig, type EmbedConfig } from '$lib/utils/embedUrl';
 
 export interface VideoItem {
@@ -16,6 +16,10 @@ export interface VideoItem {
   channelUrl: string | null;
   duration: number | null;
   embedConfig: EmbedConfig;
+  // For progress tracking
+  sourceType?: 'feed' | 'saved' | 'discover';
+  sourceId?: number; // Database ID for feed/saved items
+  watchProgress?: number; // Existing progress in seconds
 }
 
 export interface StreamInfo {
@@ -278,6 +282,9 @@ export function feedItemToVideoItem(item: FeedItem): VideoItem {
     channelUrl: null, // FeedItem doesn't have channel URL
     duration: item.duration_seconds,
     embedConfig,
+    sourceType: 'feed',
+    sourceId: item.id,
+    watchProgress: item.watch_progress_seconds ?? undefined,
   };
 }
 
@@ -296,6 +303,8 @@ export function discoverVideoToVideoItem(video: DiscoverVideoResult): VideoItem 
     channelUrl: video.channel_url,
     duration: video.duration_seconds,
     embedConfig,
+    sourceType: 'discover',
+    // Discover videos don't have progress tracking until saved
   };
 }
 
@@ -314,6 +323,9 @@ export function savedVideoToVideoItem(video: SavedVideo): VideoItem {
     channelUrl: video.channel_url,
     duration: video.duration_seconds,
     embedConfig,
+    sourceType: 'saved',
+    sourceId: video.id,
+    watchProgress: video.watch_progress_seconds ?? undefined,
   };
 }
 
@@ -329,4 +341,38 @@ export function formatDuration(seconds: number | null): string {
     return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
   return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Open a feed video with fresh progress data from the API.
+ * Fetches the latest watch_progress_seconds to ensure correct resume position.
+ */
+export async function openFeedVideo(item: FeedItem): Promise<void> {
+  try {
+    // Fetch fresh item data with latest progress
+    const freshItem = await api.getFeedItem(item.id);
+    const videoItem = feedItemToVideoItem(freshItem);
+    videoPlayer.openModal(videoItem);
+  } catch {
+    // Fallback to cached data if API fails
+    const videoItem = feedItemToVideoItem(item);
+    videoPlayer.openModal(videoItem);
+  }
+}
+
+/**
+ * Open a saved video with fresh progress data from the API.
+ * Fetches the latest watch_progress_seconds to ensure correct resume position.
+ */
+export async function openSavedVideo(video: SavedVideo): Promise<void> {
+  try {
+    // Fetch fresh video data with latest progress
+    const freshVideo = await api.getSavedVideo(video.id);
+    const videoItem = savedVideoToVideoItem(freshVideo);
+    videoPlayer.openModal(videoItem);
+  } catch {
+    // Fallback to cached data if API fails
+    const videoItem = savedVideoToVideoItem(video);
+    videoPlayer.openModal(videoItem);
+  }
 }

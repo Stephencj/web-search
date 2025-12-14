@@ -2,7 +2,14 @@
   import { videoPlayer, formatDuration, getCachedStreamInfo, prefetchStreams, type StreamInfo } from '$lib/stores/videoPlayer.svelte';
   import { getPlatformName, getPlatformColor } from '$lib/utils/embedUrl';
   import { loadYouTubeAPI, createYouTubePlayer, type YouTubePlayer } from '$lib/utils/youtubeApi';
+  import { api } from '$lib/api/client';
   import EmbedFallback from './EmbedFallback.svelte';
+
+  // Progress tracking
+  let progressInterval: ReturnType<typeof setInterval> | null = null;
+  let lastSavedProgress = 0;
+  const PROGRESS_SAVE_INTERVAL = 15000; // Save every 15 seconds
+  const WATCHED_THRESHOLD = 0.90; // Mark as watched at 90% completion
 
   // Dragging state
   let isDragging = $state(false);
@@ -43,6 +50,13 @@
   const dimensions = $derived(size === 'small' ? { width: 320, height: 180 } : { width: 480, height: 270 });
 
   function handleClose() {
+    // Save final progress before closing
+    const currentTime = getCurrentPlaybackTime();
+    if (currentTime > 0) {
+      saveProgress(currentTime);
+    }
+    stopProgressTracking();
+
     // Clean up YouTube player
     if (ytPlayer) {
       try {
@@ -58,6 +72,7 @@
     streamInfo = null;
     useDirectStream = false;
     position = { x: 0, y: 0 };
+    lastSavedProgress = 0;
   }
 
   async function fetchStreamInfo() {
@@ -100,21 +115,139 @@
     }
   }
 
-  function handleExpand() {
-    // Save current playhead position before switching
-    let currentTime = 0;
+  /**
+   * Get the current playback time from whichever player is active
+   */
+  function getCurrentPlaybackTime(): number {
     if (ytPlayer && ytPlayerReady) {
       try {
-        currentTime = ytPlayer.getCurrentTime();
+        return ytPlayer.getCurrentTime();
       } catch {}
-    } else if (videoElement) {
-      currentTime = videoElement.currentTime;
     }
+    if (videoElement) {
+      return videoElement.currentTime;
+    }
+    return 0;
+  }
+
+  /**
+   * Get the total duration from whichever player is active
+   */
+  function getTotalDuration(): number {
+    if (ytPlayer && ytPlayerReady) {
+      try {
+        return ytPlayer.getDuration();
+      } catch {}
+    }
+    if (videoElement) {
+      return videoElement.duration || video?.duration || 0;
+    }
+    return video?.duration || 0;
+  }
+
+  /**
+   * Save progress to the API
+   */
+  async function saveProgress(currentTime: number) {
+    if (!video || !video.sourceId || video.sourceType === 'discover') return;
+    if (Math.abs(currentTime - lastSavedProgress) < 5) return;
+
+    try {
+      if (video.sourceType === 'feed') {
+        await api.updateFeedItemProgress(video.sourceId, Math.floor(currentTime));
+      } else if (video.sourceType === 'saved') {
+        await api.updateSavedVideoProgress(video.sourceId, Math.floor(currentTime));
+      }
+      lastSavedProgress = currentTime;
+      console.log('[PiP] Progress saved:', Math.floor(currentTime), 'seconds');
+    } catch (e) {
+      console.warn('[PiP] Failed to save progress:', e);
+    }
+  }
+
+  /**
+   * Mark the video as watched
+   */
+  async function markAsWatched(finalProgress: number) {
+    if (!video || !video.sourceId || video.sourceType === 'discover') return;
+
+    try {
+      if (video.sourceType === 'feed') {
+        await api.markFeedItemWatched(video.sourceId, Math.floor(finalProgress));
+      } else if (video.sourceType === 'saved') {
+        await api.markSavedVideoWatched(video.sourceId, Math.floor(finalProgress));
+      }
+      console.log('[PiP] Marked as watched');
+    } catch (e) {
+      console.warn('[PiP] Failed to mark as watched:', e);
+    }
+  }
+
+  /**
+   * Check if video should be marked as watched (>90% complete)
+   */
+  function checkWatchedThreshold() {
+    const currentTime = getCurrentPlaybackTime();
+    const duration = getTotalDuration();
+    if (duration > 0 && currentTime / duration >= WATCHED_THRESHOLD) {
+      markAsWatched(currentTime);
+      stopProgressTracking();
+    }
+  }
+
+  /**
+   * Start periodic progress tracking
+   */
+  function startProgressTracking() {
+    stopProgressTracking();
+    progressInterval = setInterval(() => {
+      const currentTime = getCurrentPlaybackTime();
+      saveProgress(currentTime);
+      checkWatchedThreshold();
+    }, PROGRESS_SAVE_INTERVAL);
+    console.log('[PiP] Progress tracking started');
+  }
+
+  /**
+   * Stop progress tracking
+   */
+  function stopProgressTracking() {
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      progressInterval = null;
+    }
+  }
+
+  /**
+   * Get the initial playhead position
+   */
+  function getInitialPlayhead(): number {
+    if (savedPlayhead > 0) {
+      return savedPlayhead;
+    }
+    if (video?.watchProgress && video.watchProgress > 0) {
+      return video.watchProgress;
+    }
+    return 0;
+  }
+
+  function handleExpand() {
+    // Save current playhead position before switching
+    const currentTime = getCurrentPlaybackTime();
+    if (currentTime > 0) {
+      saveProgress(currentTime);
+    }
+    stopProgressTracking();
     videoPlayer.savePlayhead(currentTime);
     videoPlayer.switchToModal();
   }
 
   function handleVideoEnded() {
+    // Mark video as watched when it ends naturally
+    const duration = getTotalDuration();
+    markAsWatched(duration);
+    stopProgressTracking();
+
     // Try to play next video in queue, otherwise close
     if (!videoPlayer.playNext()) {
       handleClose();
@@ -148,7 +281,7 @@
         return;
       }
 
-      const startTime = savedPlayhead;
+      const startTime = getInitialPlayhead();
 
       ytPlayer = createYouTubePlayer('pip-yt-player-container', video.videoId, {
         onReady: () => {
@@ -159,8 +292,11 @@
             try {
               ytPlayer.seekTo(startTime, true);
               videoPlayer.clearSavedPlayhead();
+              console.log('[PiP] Seeking to saved position:', startTime);
             } catch {}
           }
+          // Start progress tracking
+          startProgressTracking();
         },
         onEnded: () => {
           console.log('[PiP] YouTube video ended');
@@ -243,6 +379,8 @@
       streamInfo = null;
       useDirectStream = false;
       ytPlayerReady = false;
+      lastSavedProgress = 0;
+      stopProgressTracking();
       // Fetch stream info for direct playback
       fetchStreamInfo();
     }
@@ -257,17 +395,24 @@
     }
   });
 
-  // Restore playhead for direct video element
+  // Restore playhead for direct video element and start progress tracking
   $effect(() => {
-    if (videoElement && savedPlayhead > 0 && hasDirectStream) {
-      videoElement.currentTime = savedPlayhead;
-      videoPlayer.clearSavedPlayhead();
+    if (videoElement && hasDirectStream) {
+      const startTime = getInitialPlayhead();
+      if (startTime > 0) {
+        videoElement.currentTime = startTime;
+        videoPlayer.clearSavedPlayhead();
+        console.log('[PiP] Direct video seeking to:', startTime);
+      }
+      // Start progress tracking for direct video
+      startProgressTracking();
     }
   });
 
-  // Cleanup YouTube player when closing or switching modes
+  // Cleanup YouTube player and progress tracking when closing or switching modes
   $effect(() => {
     return () => {
+      stopProgressTracking();
       if (ytPlayer) {
         try {
           ytPlayer.destroy();

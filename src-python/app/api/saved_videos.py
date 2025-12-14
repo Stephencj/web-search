@@ -208,6 +208,30 @@ async def mark_unwatched(video_id: int, db: DbSession) -> SavedVideoResponse:
     return _video_to_response(video)
 
 
+@router.put("/{video_id}/progress", response_model=SavedVideoResponse)
+async def update_watch_progress(
+    video_id: int,
+    progress_seconds: int = Query(..., description="Current playback position in seconds"),
+    db: DbSession = None,
+) -> SavedVideoResponse:
+    """
+    Update watch progress for a saved video.
+
+    Call this periodically during playback to save the current position.
+    Does not mark the video as watched - use the /watched endpoint for that.
+    """
+    service = get_saved_video_service()
+    video = await service.update_progress(db, video_id, progress_seconds)
+
+    if not video:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Saved video with id {video_id} not found",
+        )
+
+    return _video_to_response(video)
+
+
 @router.delete("/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_saved_video(video_id: int, db: DbSession) -> None:
     """Delete a saved video."""

@@ -9,7 +9,7 @@
     type FeedStats,
     type FeedMode,
   } from '$lib/api/client';
-  import { videoPlayer, feedItemToVideoItem, formatDuration } from '$lib/stores/videoPlayer.svelte';
+  import { videoPlayer, feedItemToVideoItem, formatDuration, openFeedVideo } from '$lib/stores/videoPlayer.svelte';
   import { feedPreferences } from '$lib/stores/feedPreferences.svelte';
   import FeedModeSelector from '$lib/components/FeedModeSelector/FeedModeSelector.svelte';
   import SaveButton from '$lib/components/SaveButton/SaveButton.svelte';
@@ -201,13 +201,27 @@
     }));
   }
 
-  function playVideo(item: FeedItem) {
+  async function playVideo(item: FeedItem) {
     // Find index of selected video in the current feed
     const index = feedItems.findIndex(v => v.id === item.id);
+
+    // Fetch fresh progress for the clicked video
+    let freshItem = item;
+    try {
+      freshItem = await api.getFeedItem(item.id);
+    } catch {
+      // Use cached data if fetch fails
+    }
+
     // Convert all feed items to VideoItems for the queue
-    const queue = feedItems.map(v => feedItemToVideoItem(v));
+    // Use fresh data for the clicked item to ensure correct playhead
+    const queue = feedItems.map(v =>
+      v.id === item.id ? feedItemToVideoItem(freshItem) : feedItemToVideoItem(v)
+    );
+
     // Open with queue for playlist auto-advance
     videoPlayer.openWithQueue(queue, index >= 0 ? index : 0);
+
     // Mark as watched when playing
     if (!item.is_watched) {
       handleMarkWatched(item);

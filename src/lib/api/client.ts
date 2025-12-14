@@ -1011,6 +1011,14 @@ class ApiClient {
     return this.request(`/feed/items/${id}/unwatched`, { method: 'PUT' });
   }
 
+  async updateFeedItemProgress(id: number, progressSeconds: number): Promise<FeedItem> {
+    return this.request(`/feed/items/${id}/progress?progress_seconds=${progressSeconds}`, { method: 'PUT' });
+  }
+
+  async getFeedItem(id: number): Promise<FeedItem> {
+    return this.request(`/feed/items/${id}`);
+  }
+
   async syncAllFeeds(): Promise<SyncResult[]> {
     return this.request('/feed/sync', { method: 'POST' });
   }
@@ -1135,6 +1143,10 @@ class ApiClient {
 
   async markSavedVideoUnwatched(id: number): Promise<SavedVideo> {
     return this.request(`/saved-videos/${id}/unwatched`, { method: 'PUT' });
+  }
+
+  async updateSavedVideoProgress(id: number, progressSeconds: number): Promise<SavedVideo> {
+    return this.request(`/saved-videos/${id}/progress?progress_seconds=${progressSeconds}`, { method: 'PUT' });
   }
 
   async deleteSavedVideo(id: number): Promise<void> {
