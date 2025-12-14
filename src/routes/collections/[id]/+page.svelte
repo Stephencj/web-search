@@ -13,6 +13,8 @@
   } from '$lib/stores/collections';
   import { MediaViewer } from '$lib/components/MediaViewer';
   import { mediaViewer, type MediaItem } from '$lib/stores/mediaViewer.svelte';
+  import { videoPlayer, type VideoItem } from '$lib/stores/videoPlayer.svelte';
+  import { buildEmbedConfig } from '$lib/utils/embedUrl';
 
   let collectionId = $derived(parseInt($page.params.id || '0'));
   let showEditModal = $state(false);
@@ -87,9 +89,47 @@
     }
   }
 
+  /**
+   * Convert a collection item to a VideoItem for the video player
+   */
+  function collectionItemToVideoItem(item: CollectionItem): VideoItem {
+    const platform = item.embed_type === 'youtube' ? 'youtube' :
+                     item.embed_type === 'vimeo' ? 'vimeo' : 'other';
+    const embedConfig = buildEmbedConfig(platform, item.video_id || '', item.url);
+
+    return {
+      platform,
+      videoId: item.video_id || '',
+      videoUrl: item.url,
+      title: item.title || 'Untitled Video',
+      thumbnailUrl: item.thumbnail_url,
+      channelName: item.domain || null,
+      channelUrl: null,
+      duration: null,
+      embedConfig,
+    };
+  }
+
   function openMediaViewer(index: number) {
     if (!$currentCollection) return;
 
+    const clickedItem = $currentCollection.items[index];
+
+    // For videos, use the video player with queue support
+    if (clickedItem.item_type === 'video') {
+      // Get all videos from the collection
+      const videoItems = $currentCollection.items.filter(item => item.item_type === 'video');
+      const videoQueue = videoItems.map(item => collectionItemToVideoItem(item));
+
+      // Find the index of the clicked video in the video-only array
+      const videoIndex = videoItems.findIndex(item => item.id === clickedItem.id);
+
+      // Open with queue for auto-advance
+      videoPlayer.openWithQueue(videoQueue, videoIndex >= 0 ? videoIndex : 0);
+      return;
+    }
+
+    // For images (and mixed content fallback), use the media viewer
     const items: MediaItem[] = $currentCollection.items.map((item) => ({
       type: item.item_type as 'image' | 'video',
       url: item.url,
