@@ -28,6 +28,10 @@ function createVideoPlayerStore() {
   let mode = $state<PlayerMode>('closed');
   let queue = $state<VideoItem[]>([]);
   let currentIndex = $state<number>(-1);
+  // Track playhead position for seamless mode switching
+  let savedPlayhead = $state<number>(0);
+  // Unique key to force player re-initialization on video change
+  let videoKey = $state<number>(0);
 
   return {
     get currentVideo() {
@@ -60,6 +64,26 @@ function createVideoPlayerStore() {
     get queueLength() {
       return queue.length;
     },
+    get savedPlayhead() {
+      return savedPlayhead;
+    },
+    get videoKey() {
+      return videoKey;
+    },
+
+    /**
+     * Save current playhead position (call before switching modes)
+     */
+    savePlayhead(time: number) {
+      savedPlayhead = time;
+    },
+
+    /**
+     * Clear saved playhead (call after player resumes at saved position)
+     */
+    clearSavedPlayhead() {
+      savedPlayhead = 0;
+    },
 
     /**
      * Open video in modal mode
@@ -67,6 +91,8 @@ function createVideoPlayerStore() {
     openModal(video: VideoItem) {
       currentVideo = video;
       mode = 'modal';
+      savedPlayhead = 0;
+      videoKey++;
       // Clear queue when opening single video
       queue = [];
       currentIndex = -1;
@@ -81,6 +107,8 @@ function createVideoPlayerStore() {
       currentIndex = Math.max(0, Math.min(startIndex, videos.length - 1));
       currentVideo = queue[currentIndex];
       mode = 'modal';
+      savedPlayhead = 0;
+      videoKey++;
     },
 
     /**
@@ -90,6 +118,8 @@ function createVideoPlayerStore() {
       if (queue.length > 0 && currentIndex < queue.length - 1) {
         currentIndex++;
         currentVideo = queue[currentIndex];
+        savedPlayhead = 0;
+        videoKey++;
         return true;
       }
       return false;
@@ -102,13 +132,15 @@ function createVideoPlayerStore() {
       if (queue.length > 0 && currentIndex > 0) {
         currentIndex--;
         currentVideo = queue[currentIndex];
+        savedPlayhead = 0;
+        videoKey++;
         return true;
       }
       return false;
     },
 
     /**
-     * Switch current video to PiP mode
+     * Switch current video to PiP mode (preserves playhead via savePlayhead call)
      */
     switchToPiP() {
       if (currentVideo) {
@@ -117,7 +149,7 @@ function createVideoPlayerStore() {
     },
 
     /**
-     * Switch from PiP back to modal
+     * Switch from PiP back to modal (preserves playhead via savePlayhead call)
      */
     switchToModal() {
       if (currentVideo) {
@@ -133,6 +165,7 @@ function createVideoPlayerStore() {
       currentVideo = null;
       queue = [];
       currentIndex = -1;
+      savedPlayhead = 0;
     },
 
     /**
@@ -140,6 +173,8 @@ function createVideoPlayerStore() {
      */
     setVideo(video: VideoItem) {
       currentVideo = video;
+      savedPlayhead = 0;
+      videoKey++;
       if (mode === 'closed') {
         mode = 'modal';
       }
