@@ -32,7 +32,18 @@
       "Bash(docker-compose down:*)",
       "Bash(docker-compose up:*)",
       "Bash(docker-compose ps:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(docker-compose build:*)",
+      "Bash(docker-compose config:*)",
+      "Bash(docker-compose:*)",
+      "Bash(net stop com.docker.service)",
+      "Bash(net start com.docker.service)",
+      "Bash(powershell -Command \"Stop-Process -Name ''Docker Desktop'' -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 3; Start-Process ''C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe''\")",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 25; docker info\")",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 15\")",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 60\")",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 90\")",
+      "Bash(find:*)"
     ]
   }
 }

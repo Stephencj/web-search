@@ -26,6 +26,8 @@ export type PlayerMode = 'modal' | 'pip' | 'closed';
 function createVideoPlayerStore() {
   let currentVideo = $state<VideoItem | null>(null);
   let mode = $state<PlayerMode>('closed');
+  let queue = $state<VideoItem[]>([]);
+  let currentIndex = $state<number>(-1);
 
   return {
     get currentVideo() {
@@ -43,6 +45,21 @@ function createVideoPlayerStore() {
     get isPiP() {
       return mode === 'pip';
     },
+    get queue() {
+      return queue;
+    },
+    get currentIndex() {
+      return currentIndex;
+    },
+    get hasNext() {
+      return queue.length > 0 && currentIndex < queue.length - 1;
+    },
+    get hasPrevious() {
+      return queue.length > 0 && currentIndex > 0;
+    },
+    get queueLength() {
+      return queue.length;
+    },
 
     /**
      * Open video in modal mode
@@ -50,6 +67,44 @@ function createVideoPlayerStore() {
     openModal(video: VideoItem) {
       currentVideo = video;
       mode = 'modal';
+      // Clear queue when opening single video
+      queue = [];
+      currentIndex = -1;
+    },
+
+    /**
+     * Open video with a queue (playlist mode)
+     */
+    openWithQueue(videos: VideoItem[], startIndex: number = 0) {
+      if (videos.length === 0) return;
+      queue = [...videos];
+      currentIndex = Math.max(0, Math.min(startIndex, videos.length - 1));
+      currentVideo = queue[currentIndex];
+      mode = 'modal';
+    },
+
+    /**
+     * Play next video in queue
+     */
+    playNext() {
+      if (queue.length > 0 && currentIndex < queue.length - 1) {
+        currentIndex++;
+        currentVideo = queue[currentIndex];
+        return true;
+      }
+      return false;
+    },
+
+    /**
+     * Play previous video in queue
+     */
+    playPrevious() {
+      if (queue.length > 0 && currentIndex > 0) {
+        currentIndex--;
+        currentVideo = queue[currentIndex];
+        return true;
+      }
+      return false;
     },
 
     /**
@@ -76,6 +131,8 @@ function createVideoPlayerStore() {
     close() {
       mode = 'closed';
       currentVideo = null;
+      queue = [];
+      currentIndex = -1;
     },
 
     /**
@@ -86,6 +143,14 @@ function createVideoPlayerStore() {
       if (mode === 'closed') {
         mode = 'modal';
       }
+    },
+
+    /**
+     * Clear the queue but keep current video
+     */
+    clearQueue() {
+      queue = [];
+      currentIndex = -1;
     },
   };
 }
@@ -104,8 +169,8 @@ export function feedItemToVideoItem(item: FeedItem): VideoItem {
     videoUrl: item.video_url,
     title: item.title,
     thumbnailUrl: item.thumbnail_url,
-    channelName: item.channel?.name || null,
-    channelUrl: item.channel?.channel_url || null,
+    channelName: item.channel_name || null,
+    channelUrl: null, // FeedItem doesn't have channel URL
     duration: item.duration_seconds,
     embedConfig,
   };

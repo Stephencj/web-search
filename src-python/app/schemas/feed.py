@@ -22,6 +22,7 @@ class FeedItemResponse(BaseModel):
     duration_seconds: Optional[int]
     view_count: Optional[int]
     upload_date: datetime
+    categories: Optional[list[str]] = None
 
     is_watched: bool
     watched_at: Optional[datetime]
@@ -80,6 +81,12 @@ class FeedQuery(BaseModel):
     page: int = Field(default=1, ge=1)
     per_page: int = Field(default=50, ge=1, le=100)
     since: Optional[datetime] = None
+    # Feed mode and sorting
+    mode: Optional[str] = None  # Feed mode preset (catch_up, quick_watch, etc.)
+    sort_by: Optional[str] = None  # newest, oldest, views, duration_asc, duration_desc, random
+    category: Optional[str] = None  # YouTube category filter
+    duration_min: Optional[int] = None  # Min duration in seconds
+    duration_max: Optional[int] = None  # Max duration in seconds
 
 
 class WatchStateUpdate(BaseModel):

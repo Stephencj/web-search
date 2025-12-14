@@ -1,7 +1,20 @@
 <script lang="ts">
   import { videoPlayer, formatDuration } from '$lib/stores/videoPlayer.svelte';
   import { getPlatformName, getPlatformColor } from '$lib/utils/embedUrl';
+  import { loadYouTubeAPI, createYouTubePlayer, type YouTubePlayer } from '$lib/utils/youtubeApi';
   import EmbedFallback from './EmbedFallback.svelte';
+
+  interface StreamInfo {
+    video_id: string;
+    platform: string;
+    title?: string;
+    stream_url?: string;
+    audio_url?: string;
+    is_authenticated: boolean;
+    is_premium: boolean;
+    quality?: string;
+    error?: string;
+  }
 
   // Dragging state
   let isDragging = $state(false);
@@ -10,6 +23,18 @@
   let playerRef: HTMLDivElement | undefined = $state();
   let iframeLoaded = $state(false);
   let iframeError = $state(false);
+
+  // Direct stream state
+  let streamInfo = $state<StreamInfo | null>(null);
+  let loadingStream = $state(false);
+  let useDirectStream = $state(false);
+  let videoElement: HTMLVideoElement | null = $state(null);
+
+  // YouTube API player
+  let ytPlayer: YouTubePlayer | null = null;
+  let ytPlayerReady = $state(false);
+  let ytApiLoading = $state(false);
+  let useYouTubeApi = $state(true);
 
   // Size: small (320x180) or medium (480x270)
   let size = $state<'small' | 'medium'>('small');
@@ -21,18 +46,108 @@
   const canEmbed = $derived(video?.embedConfig.supportsEmbed && !iframeError);
   const platformName = $derived(video ? getPlatformName(video.platform) : '');
   const platformColor = $derived(video ? getPlatformColor(video.platform) : '#666');
+  const hasDirectStream = $derived(streamInfo?.stream_url && useDirectStream);
+  const isYouTube = $derived(video?.platform === 'youtube');
+  const shouldUseYtApi = $derived(isYouTube && useYouTubeApi && canEmbed && !hasDirectStream);
 
   const dimensions = $derived(size === 'small' ? { width: 320, height: 180 } : { width: 480, height: 270 });
 
   function handleClose() {
+    // Clean up YouTube player
+    if (ytPlayer) {
+      try {
+        ytPlayer.destroy();
+      } catch {}
+      ytPlayer = null;
+    }
+    ytPlayerReady = false;
+
     videoPlayer.close();
     iframeLoaded = false;
     iframeError = false;
+    streamInfo = null;
+    useDirectStream = false;
     position = { x: 0, y: 0 };
+  }
+
+  async function fetchStreamInfo() {
+    if (!video || video.platform !== 'youtube') return;
+
+    loadingStream = true;
+    try {
+      const response = await fetch(`/api/stream/${video.platform}/${video.videoId}`);
+      if (response.ok) {
+        streamInfo = await response.json();
+        console.log('[PiP] Stream info:', streamInfo?.is_premium ? 'Premium' : 'Standard', streamInfo?.quality || 'N/A');
+        // Auto-enable direct stream if available and premium
+        if (streamInfo?.stream_url && streamInfo?.is_premium) {
+          useDirectStream = true;
+        }
+      } else {
+        console.warn('[PiP] Stream API error:', response.status);
+      }
+    } catch (e) {
+      console.warn('[PiP] Stream fetch failed:', e);
+    } finally {
+      loadingStream = false;
+    }
+  }
+
+  function toggleDirectStream() {
+    if (streamInfo?.stream_url) {
+      useDirectStream = !useDirectStream;
+    }
   }
 
   function handleExpand() {
     videoPlayer.switchToModal();
+  }
+
+  function handleVideoEnded() {
+    // Try to play next video in queue, otherwise close
+    if (!videoPlayer.playNext()) {
+      handleClose();
+    }
+  }
+
+  async function initYouTubePlayer() {
+    if (!video || video.platform !== 'youtube') return;
+
+    ytApiLoading = true;
+    try {
+      await loadYouTubeAPI();
+
+      // Clean up existing player
+      if (ytPlayer) {
+        try {
+          ytPlayer.destroy();
+        } catch {}
+        ytPlayer = null;
+      }
+
+      // Small delay to ensure DOM is ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      ytPlayer = createYouTubePlayer('pip-yt-player-container', video.videoId, {
+        onReady: () => {
+          ytPlayerReady = true;
+          console.log('[PiP] YouTube player ready');
+        },
+        onEnded: () => {
+          console.log('[PiP] YouTube video ended');
+          handleVideoEnded();
+        },
+        onError: (error) => {
+          console.warn('[PiP] YouTube player error:', error);
+          useYouTubeApi = false;
+        },
+      });
+    } catch (error) {
+      console.warn('[PiP] Failed to init YouTube API:', error);
+      useYouTubeApi = false;
+    } finally {
+      ytApiLoading = false;
+    }
   }
 
   function toggleSize() {
@@ -96,7 +211,31 @@
     if (video) {
       iframeLoaded = false;
       iframeError = false;
+      streamInfo = null;
+      useDirectStream = false;
+      ytPlayerReady = false;
+      // Fetch stream info for direct playback
+      fetchStreamInfo();
     }
+  });
+
+  // Initialize YouTube API player for YouTube videos
+  $effect(() => {
+    if (isOpen && shouldUseYtApi && video) {
+      initYouTubePlayer();
+    }
+  });
+
+  // Cleanup YouTube player when closing or switching modes
+  $effect(() => {
+    return () => {
+      if (ytPlayer) {
+        try {
+          ytPlayer.destroy();
+        } catch {}
+        ytPlayer = null;
+      }
+    };
   });
 
   // Calculate initial position (bottom-right corner with padding)
@@ -128,7 +267,31 @@
   >
     <!-- Video Content -->
     <div class="pip-content">
-      {#if canEmbed && embedUrl}
+      {#if hasDirectStream && streamInfo?.stream_url}
+        <!-- Direct stream playback (premium, no ads) -->
+        <div class="direct-player">
+          <video
+            bind:this={videoElement}
+            src={streamInfo.stream_url}
+            controls
+            autoplay
+            class="direct-video"
+            onended={handleVideoEnded}
+          >
+            Your browser does not support video playback.
+          </video>
+        </div>
+      {:else if shouldUseYtApi}
+        <!-- YouTube API player for auto-advance detection -->
+        <div class="yt-player-wrapper">
+          {#if !ytPlayerReady || ytApiLoading}
+            <div class="loading-spinner">
+              <div class="spinner"></div>
+            </div>
+          {/if}
+          <div id="pip-yt-player-container" class="yt-player-container" class:loaded={ytPlayerReady}></div>
+        </div>
+      {:else if canEmbed && embedUrl}
         <div class="iframe-container">
           {#if !iframeLoaded}
             <div class="loading-spinner">
@@ -166,10 +329,27 @@
     <!-- Controls Overlay -->
     <div class="pip-controls">
       <div class="controls-top">
-        <span class="platform-badge" style="background-color: {platformColor}">
-          {platformName}
-        </span>
+        <div class="controls-left">
+          <span class="platform-badge" style="background-color: {platformColor}">
+            {platformName}
+          </span>
+          {#if streamInfo?.is_premium}
+            <span class="premium-badge" title="Premium playback">P</span>
+          {/if}
+        </div>
         <div class="controls-right">
+          {#if streamInfo?.stream_url}
+            <button
+              class="control-btn"
+              class:active={useDirectStream}
+              onclick={toggleDirectStream}
+              title={useDirectStream ? 'Switch to embed' : 'Switch to direct (no ads)'}
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                <path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM9 8l7 4-7 4V8z"/>
+              </svg>
+            </button>
+          {/if}
           <button
             class="control-btn"
             onclick={toggleSize}
@@ -256,6 +436,25 @@
     opacity: 1;
   }
 
+  .yt-player-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .yt-player-container {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .yt-player-container.loaded {
+    opacity: 1;
+  }
+
   .loading-spinner {
     position: absolute;
     inset: 0;
@@ -276,6 +475,18 @@
 
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  .direct-player {
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }
+
+  .direct-video {
+    width: 100%;
+    height: 100%;
+    background: black;
   }
 
   .pip-fallback {
@@ -327,9 +538,8 @@
     background: linear-gradient(
       to bottom,
       rgba(0, 0, 0, 0.6) 0%,
-      transparent 30%,
-      transparent 70%,
-      rgba(0, 0, 0, 0.6) 100%
+      transparent 25%,
+      transparent 100%
     );
   }
 
@@ -343,6 +553,12 @@
     align-items: flex-start;
   }
 
+  .controls-left {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
   .platform-badge {
     padding: 2px 6px;
     border-radius: var(--radius-sm);
@@ -351,6 +567,15 @@
     font-weight: 600;
     text-transform: uppercase;
     pointer-events: auto;
+  }
+
+  .premium-badge {
+    padding: 2px 4px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, #ffd700, #ffb700);
+    color: #000;
+    font-size: 0.6rem;
+    font-weight: 700;
   }
 
   .controls-right {
@@ -377,12 +602,18 @@
     background: rgba(0, 0, 0, 0.8);
   }
 
+  .control-btn.active {
+    background: var(--color-primary);
+  }
+
   .close-btn:hover {
     background: var(--color-error);
   }
 
   .controls-bottom {
-    pointer-events: auto;
+    pointer-events: none;
+    /* Leave room for video controls at the very bottom */
+    margin-bottom: 32px;
   }
 
   .video-title {

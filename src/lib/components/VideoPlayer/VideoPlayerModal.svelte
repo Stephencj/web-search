@@ -1,6 +1,8 @@
 <script lang="ts">
   import { videoPlayer, formatDuration } from '$lib/stores/videoPlayer.svelte';
+  import { playbackPreferences } from '$lib/stores/playbackPreferences.svelte';
   import { getPlatformName, getPlatformColor } from '$lib/utils/embedUrl';
+  import { loadYouTubeAPI, createYouTubePlayer, isYouTubeAPIReady, type YouTubePlayer } from '$lib/utils/youtubeApi';
   import EmbedFallback from './EmbedFallback.svelte';
 
   interface Props {
@@ -26,6 +28,13 @@
   let streamInfo = $state<StreamInfo | null>(null);
   let loadingStream = $state(false);
   let useDirectStream = $state(false);
+  let videoElement: HTMLVideoElement | null = null;
+
+  // YouTube API player
+  let ytPlayer: YouTubePlayer | null = null;
+  let ytPlayerReady = $state(false);
+  let ytApiLoading = $state(false);
+  let useYouTubeApi = $state(true); // Default to using YT API for better end detection
 
   // Computed values
   const video = $derived(videoPlayer.currentVideo);
@@ -36,8 +45,19 @@
   const platformColor = $derived(video ? getPlatformColor(video.platform) : '#666');
   const hasDirectStream = $derived(streamInfo?.stream_url && useDirectStream);
   const isPremium = $derived(streamInfo?.is_premium ?? false);
+  const isYouTube = $derived(video?.platform === 'youtube');
+  const shouldUseYtApi = $derived(isYouTube && useYouTubeApi && canEmbed && !hasDirectStream);
 
   function handleClose() {
+    // Clean up YouTube player
+    if (ytPlayer) {
+      try {
+        ytPlayer.destroy();
+      } catch {}
+      ytPlayer = null;
+    }
+    ytPlayerReady = false;
+
     videoPlayer.close();
     iframeLoaded = false;
     iframeError = false;
@@ -77,11 +97,81 @@
     }
   }
 
+  // Queue-related derived values
+  const hasNext = $derived(videoPlayer.hasNext);
+  const hasPrevious = $derived(videoPlayer.hasPrevious);
+  const queuePosition = $derived(
+    videoPlayer.queueLength > 0
+      ? `${videoPlayer.currentIndex + 1}/${videoPlayer.queueLength}`
+      : null
+  );
+
+  function handlePrevious() {
+    videoPlayer.playPrevious();
+  }
+
+  function handleNext() {
+    videoPlayer.playNext();
+  }
+
+  function handleVideoEnded() {
+    // Auto-advance to next video in queue
+    if (!videoPlayer.playNext()) {
+      // No more videos, close the player
+      handleClose();
+    }
+  }
+
+  async function initYouTubePlayer() {
+    if (!video || video.platform !== 'youtube') return;
+
+    ytApiLoading = true;
+    try {
+      await loadYouTubeAPI();
+
+      // Clean up existing player
+      if (ytPlayer) {
+        try {
+          ytPlayer.destroy();
+        } catch {}
+        ytPlayer = null;
+      }
+
+      // Small delay to ensure DOM is ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      ytPlayer = createYouTubePlayer('yt-player-container', video.videoId, {
+        onReady: () => {
+          ytPlayerReady = true;
+          console.log('[Modal] YouTube player ready');
+        },
+        onEnded: () => {
+          console.log('[Modal] YouTube video ended');
+          handleVideoEnded();
+        },
+        onError: (error) => {
+          console.warn('[Modal] YouTube player error:', error);
+          // Fall back to iframe on error
+          useYouTubeApi = false;
+        },
+      });
+    } catch (error) {
+      console.warn('[Modal] Failed to init YouTube API:', error);
+      useYouTubeApi = false;
+    } finally {
+      ytApiLoading = false;
+    }
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       handleClose();
     } else if (event.key === 'p' || event.key === 'P') {
       handleSwitchToPiP();
+    } else if (event.key === 'ArrowLeft' && hasPrevious) {
+      handlePrevious();
+    } else if (event.key === 'ArrowRight' && hasNext) {
+      handleNext();
     }
   }
 
@@ -100,10 +190,60 @@
       iframeError = false;
       streamInfo = null;
       useDirectStream = false;
+      ytPlayerReady = false;
       onMarkWatched?.();
       // Fetch stream info for authenticated playback
       fetchStreamInfo();
     }
+  });
+
+  // Initialize YouTube API player for YouTube videos
+  $effect(() => {
+    if (isOpen && shouldUseYtApi && video) {
+      initYouTubePlayer();
+    }
+  });
+
+  // Cleanup YouTube player when switching modes or closing
+  $effect(() => {
+    return () => {
+      if (ytPlayer) {
+        try {
+          ytPlayer.destroy();
+        } catch {}
+        ytPlayer = null;
+      }
+    };
+  });
+
+  // Handle visibility changes for background playback
+  $effect(() => {
+    if (!isOpen) return;
+
+    function handleVisibilityChange() {
+      if (document.hidden && playbackPreferences.backgroundPlayback) {
+        // Tab became hidden and background playback is enabled
+        if (useDirectStream && videoElement) {
+          // For direct video: try to enter PiP mode to continue playback
+          if (document.pictureInPictureEnabled && !document.pictureInPictureElement) {
+            videoElement.requestPictureInPicture().catch(() => {
+              // PiP not available, video continues in background anyway for direct streams
+            });
+          }
+        } else if (canEmbed) {
+          // For embeds: switch to PiP player which handles background playback better
+          videoPlayer.switchToPiP();
+        }
+      } else if (!document.hidden && videoElement) {
+        // Tab became visible again - exit PiP if we entered it automatically
+        if (document.pictureInPictureElement === videoElement) {
+          document.exitPictureInPicture().catch(() => {});
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   });
 </script>
 
@@ -131,6 +271,31 @@
               </svg>
               Premium
             </span>
+          {/if}
+          {#if queuePosition}
+            <div class="queue-controls">
+              <button
+                class="header-btn nav-btn"
+                onclick={handlePrevious}
+                disabled={!hasPrevious}
+                title="Previous (Left Arrow)"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                  <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+                </svg>
+              </button>
+              <span class="queue-position">{queuePosition}</span>
+              <button
+                class="header-btn nav-btn"
+                onclick={handleNext}
+                disabled={!hasNext}
+                title="Next (Right Arrow)"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                  <path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/>
+                </svg>
+              </button>
+            </div>
           {/if}
           {#if video.duration}
             <span class="duration">{formatDuration(video.duration)}</span>
@@ -177,16 +342,28 @@
           <!-- Direct stream playback (no ads, premium quality) -->
           <div class="direct-player">
             <video
+              bind:this={videoElement}
               src={streamInfo.stream_url}
               controls
               autoplay
               class="direct-video"
+              onended={handleVideoEnded}
             >
               Your browser does not support video playback.
             </video>
             {#if streamInfo.quality}
               <span class="quality-badge">{streamInfo.quality}</span>
             {/if}
+          </div>
+        {:else if shouldUseYtApi}
+          <!-- YouTube API player for auto-advance detection -->
+          <div class="yt-player-wrapper">
+            {#if !ytPlayerReady || ytApiLoading}
+              <div class="loading-spinner">
+                <div class="spinner"></div>
+              </div>
+            {/if}
+            <div id="yt-player-container" class="yt-player-container" class:loaded={ytPlayerReady}></div>
           </div>
         {:else if canEmbed && embedUrl}
           <div class="iframe-container">
@@ -293,6 +470,31 @@
     font-size: 0.875rem;
   }
 
+  .queue-controls {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-md);
+  }
+
+  .queue-position {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    min-width: 2.5em;
+    text-align: center;
+  }
+
+  .nav-btn {
+    padding: 2px !important;
+  }
+
+  .nav-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
   .header-right {
     display: flex;
     align-items: center;
@@ -381,6 +583,25 @@
     font-weight: 600;
     border-radius: var(--radius-sm);
     pointer-events: none;
+  }
+
+  .yt-player-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .yt-player-container {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .yt-player-container.loaded {
+    opacity: 1;
   }
 
   .iframe-container {

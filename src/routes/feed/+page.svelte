@@ -7,11 +7,18 @@
     type FeedResponse,
     type ChannelGroupedFeed,
     type FeedStats,
+    type FeedMode,
   } from '$lib/api/client';
   import { videoPlayer, feedItemToVideoItem, formatDuration } from '$lib/stores/videoPlayer.svelte';
+  import { feedPreferences } from '$lib/stores/feedPreferences.svelte';
+  import FeedModeSelector from '$lib/components/FeedModeSelector/FeedModeSelector.svelte';
+  import SaveButton from '$lib/components/SaveButton/SaveButton.svelte';
 
   // View mode
   let viewMode = $state<'chronological' | 'by_channel'>('chronological');
+
+  // Feed mode (algorithm)
+  let feedMode = $state<FeedMode | null>(null);
 
   // Filters
   let filterStatus = $state<'all' | 'unwatched' | 'watched'>('unwatched');
@@ -36,6 +43,12 @@
   let syncing = $state(false);
 
   onMount(() => {
+    // Initialize from stored preferences
+    feedPreferences.init();
+    feedMode = feedPreferences.mode;
+    viewMode = feedPreferences.viewMode;
+    filterStatus = feedPreferences.filterStatus;
+
     // Check for channel_id in URL
     const urlChannelId = $page.url.searchParams.get('channel_id');
     if (urlChannelId) {
@@ -44,6 +57,27 @@
     loadFeed();
     loadStats();
   });
+
+  // Handle mode change
+  function handleModeChange(mode: FeedMode | null) {
+    feedMode = mode;
+    feedPreferences.setMode(mode);
+    loadFeed();
+  }
+
+  // Handle view mode change
+  function handleViewModeChange(newViewMode: 'chronological' | 'by_channel') {
+    viewMode = newViewMode;
+    feedPreferences.setViewMode(newViewMode);
+    loadFeed();
+  }
+
+  // Handle filter status change
+  function handleFilterStatusChange(newFilterStatus: 'all' | 'unwatched' | 'watched') {
+    filterStatus = newFilterStatus;
+    feedPreferences.setFilterStatus(newFilterStatus);
+    loadFeed();
+  }
 
   async function loadFeed() {
     loading = true;
@@ -58,6 +92,7 @@
         };
         if (platformFilter !== 'all') params.platform = platformFilter;
         if (channelId) params.channel_id = channelId;
+        if (feedMode) params.mode = feedMode;
 
         const response = await api.getFeed(params);
         feedItems = response.items;
@@ -91,6 +126,7 @@
       };
       if (platformFilter !== 'all') params.platform = platformFilter;
       if (channelId) params.channel_id = channelId;
+      if (feedMode) params.mode = feedMode;
 
       const response = await api.getFeed(params);
       feedItems = [...feedItems, ...response.items];
@@ -166,8 +202,12 @@
   }
 
   function playVideo(item: FeedItem) {
-    const videoItem = feedItemToVideoItem(item);
-    videoPlayer.openModal(videoItem);
+    // Find index of selected video in the current feed
+    const index = feedItems.findIndex(v => v.id === item.id);
+    // Convert all feed items to VideoItems for the queue
+    const queue = feedItems.map(v => feedItemToVideoItem(v));
+    // Open with queue for playlist auto-advance
+    videoPlayer.openWithQueue(queue, index >= 0 ? index : 0);
     // Mark as watched when playing
     if (!item.is_watched) {
       handleMarkWatched(item);
@@ -180,6 +220,8 @@
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
+    // Handle future dates (timezone issues) or invalid dates
+    if (days < 0) return 'Today';
     if (days === 0) return 'Today';
     if (days === 1) return 'Yesterday';
     if (days < 7) return `${days} days ago`;
@@ -197,9 +239,9 @@
     loadFeed();
   }
 
-  // Reload when filters change
+  // Reload when platform filter changes
   $effect(() => {
-    if (filterStatus || platformFilter || viewMode) {
+    if (platformFilter) {
       loadFeed();
     }
   });
@@ -243,7 +285,7 @@
       <button
         class="toggle-btn"
         class:active={viewMode === 'chronological'}
-        onclick={() => (viewMode = 'chronological')}
+        onclick={() => handleViewModeChange('chronological')}
       >
         <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
           <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
@@ -253,7 +295,7 @@
       <button
         class="toggle-btn"
         class:active={viewMode === 'by_channel'}
-        onclick={() => (viewMode = 'by_channel')}
+        onclick={() => handleViewModeChange('by_channel')}
       >
         <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
           <path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z" />
@@ -263,8 +305,13 @@
     </div>
 
     <div class="filters">
+      <FeedModeSelector currentMode={feedMode} onModeChange={handleModeChange} />
       <div class="filter-group">
-        <select bind:value={filterStatus} class="select">
+        <select
+          value={filterStatus}
+          onchange={(e) => handleFilterStatusChange(e.currentTarget.value as 'all' | 'unwatched' | 'watched')}
+          class="select"
+        >
           <option value="unwatched">Unwatched</option>
           <option value="all">All Videos</option>
           <option value="watched">Watched</option>
@@ -322,28 +369,40 @@
       <div class="video-grid">
         {#each feedItems as item}
           <div class="video-card" class:watched={item.is_watched}>
-            <button class="card-thumbnail" onclick={() => playVideo(item)}>
-              {#if item.thumbnail_url}
-                <img src={item.thumbnail_url} alt={item.title} loading="lazy" />
-              {:else}
-                <div class="no-thumbnail">
+            <div class="thumbnail-wrapper">
+              <button class="card-thumbnail" onclick={() => playVideo(item)}>
+                {#if item.thumbnail_url}
+                  <img src={item.thumbnail_url} alt={item.title} loading="lazy" />
+                {:else}
+                  <div class="no-thumbnail">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </div>
+                {/if}
+                <div class="play-overlay">
                   <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
                     <path d="M8 5v14l11-7z" />
                   </svg>
                 </div>
-              {/if}
-              <div class="play-overlay">
-                <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </div>
-              {#if item.duration_seconds}
-                <span class="duration">{formatDuration(item.duration_seconds)}</span>
-              {/if}
-              {#if item.is_watched}
-                <span class="watched-badge">Watched</span>
-              {/if}
-            </button>
+                {#if item.duration_seconds}
+                  <span class="duration">{formatDuration(item.duration_seconds)}</span>
+                {/if}
+                {#if item.is_watched}
+                  <span class="watched-badge">Watched</span>
+                {/if}
+              </button>
+              <SaveButton
+                mediaType="video"
+                mediaUrl={item.video_url}
+                thumbnailUrl={item.thumbnail_url}
+                title={item.title}
+                sourceUrl={item.video_url}
+                domain={item.platform}
+                embedType={item.platform}
+                videoId={item.video_id}
+              />
+            </div>
             <div class="card-content">
               <h3 class="video-title" title={item.title}>{item.title}</h3>
               <div class="video-meta">
@@ -630,6 +689,17 @@
 
   .video-card.watched {
     opacity: 0.7;
+  }
+
+  .thumbnail-wrapper {
+    position: relative;
+  }
+
+  .thumbnail-wrapper :global(.save-btn) {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 10;
   }
 
   .card-thumbnail {

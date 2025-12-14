@@ -577,12 +577,24 @@ class OAuthService:
         if not subscriptions:
             return {"imported": 0, "skipped": 0, "failed": 0, "total_found": 0}
 
-        # Extract channel URLs
-        urls = [sub["channel_url"] for sub in subscriptions]
+        # Build metadata map from YouTube API data (avoids yt-dlp calls)
+        urls = []
+        metadata_map = {}
+        for sub in subscriptions:
+            url = sub["channel_url"]
+            urls.append(url)
+            # Pre-populate metadata from YouTube API response
+            metadata_map[url] = {
+                "name": sub.get("title") or sub.get("channel_id"),
+                "description": sub.get("description"),
+                "avatar_url": sub.get("thumbnail_url"),
+            }
 
-        # Import using channel service (handles duplicates automatically)
+        # Import using channel service with pre-fetched metadata (fast!)
         channel_service = get_channel_service()
-        result = await channel_service.import_from_urls(db, urls, import_source="youtube_oauth")
+        result = await channel_service.import_from_urls(
+            db, urls, import_source="youtube_oauth", metadata_map=metadata_map
+        )
 
         result["total_found"] = len(subscriptions)
         logger.info(

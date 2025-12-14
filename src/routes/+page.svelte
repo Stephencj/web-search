@@ -161,21 +161,23 @@
     }
   }
 
-  onMount(async () => {
+  onMount(() => {
     // Fetch available indexes
-    try {
-      const response = await api.listIndexes();
-      availableIndexes = response.items.filter(idx => idx.is_active);
-    } catch (e) {
-      console.error('Failed to fetch indexes:', e);
-    }
+    (async () => {
+      try {
+        const response = await api.listIndexes();
+        availableIndexes = response.items.filter(idx => idx.is_active);
+      } catch (e) {
+        console.error('Failed to fetch indexes:', e);
+      }
 
-    try {
-      imageSearchStatus = await api.getImageSearchStatus();
-    } catch (e) {
-      // Image search not available
-      imageSearchStatus = { enabled: false, model_loaded: false, model_name: '', embedding_dimensions: 0 };
-    }
+      try {
+        imageSearchStatus = await api.getImageSearchStatus();
+      } catch (e) {
+        // Image search not available
+        imageSearchStatus = { enabled: false, model_loaded: false, model_name: '', embedding_dimensions: 0 };
+      }
+    })();
 
     // Set up intersection observer for infinite scroll
     observer = new IntersectionObserver(

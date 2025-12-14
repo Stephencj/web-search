@@ -102,6 +102,15 @@ async def _run_migrations(conn) -> None:
         # Column already exists
         pass
 
+    # Add categories column to feed_items table if it doesn't exist
+    try:
+        await conn.execute(text(
+            "ALTER TABLE feed_items ADD COLUMN categories TEXT"
+        ))
+    except Exception:
+        # Column already exists
+        pass
+
 
 async def close_db() -> None:
     """Close database connections."""
