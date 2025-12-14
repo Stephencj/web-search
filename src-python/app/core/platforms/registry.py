@@ -154,6 +154,12 @@ class PlatformRegistry:
         except Exception as e:
             logger.warning(f"Failed to register Dailymotion platform: {e}")
 
+        try:
+            from app.core.platforms.redbar import RedBarPlatform
+            cls.register(RedBarPlatform())
+        except Exception as e:
+            logger.warning(f"Failed to register Red Bar platform: {e}")
+
         logger.info(f"Initialized {len(cls._adapters)} platform adapters")
 
 

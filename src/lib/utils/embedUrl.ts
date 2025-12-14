@@ -3,7 +3,7 @@
  * Generates embed URLs for various video platforms
  */
 
-export type VideoPlatform = 'youtube' | 'rumble' | 'odysee' | 'bitchute' | 'dailymotion';
+export type VideoPlatform = 'youtube' | 'rumble' | 'odysee' | 'bitchute' | 'dailymotion' | 'redbar';
 
 export interface EmbedConfig {
   platform: string;
@@ -21,6 +21,7 @@ export const platformInfo: Record<string, { name: string; color: string }> = {
   odysee: { name: 'Odysee', color: '#e50054' },
   bitchute: { name: 'BitChute', color: '#ef4a23' },
   dailymotion: { name: 'Dailymotion', color: '#0066DC' },
+  redbar: { name: 'Red Bar Radio', color: '#FF0000' },
 };
 
 /**

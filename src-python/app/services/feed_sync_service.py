@@ -42,6 +42,8 @@ class FeedSyncService:
                 result = await self._sync_youtube_channel(db, channel)
             elif channel.platform == "rumble":
                 result = await self._sync_rumble_channel(db, channel)
+            elif channel.platform == "redbar":
+                result = await self._sync_redbar_channel(db, channel)
             else:
                 result = {"success": False, "error": f"Unknown platform: {channel.platform}"}
 
@@ -330,6 +332,75 @@ class FeedSyncService:
 
         except Exception as e:
             logger.warning(f"Rumble sync error for {channel.name}: {e}")
+            return {"success": False, "error": str(e), "new_videos": new_videos}
+
+    async def _sync_redbar_channel(
+        self,
+        db: AsyncSession,
+        channel: Channel,
+    ) -> dict:
+        """Sync Red Bar Radio episodes using platform adapter with authentication."""
+        try:
+            from app.core.platforms.redbar import RedBarPlatform
+            from app.services.redbar_auth_service import get_redbar_auth_service
+        except ImportError as e:
+            return {"success": False, "error": f"Red Bar modules not available: {e}", "new_videos": 0}
+
+        new_videos = 0
+        skipped = 0
+
+        try:
+            # Get session cookies for authenticated access
+            auth_service = get_redbar_auth_service()
+            cookies = await auth_service.get_session_cookies(db)
+
+            # Create adapter with cookies
+            adapter = RedBarPlatform(session_cookies=cookies or {})
+
+            # Get videos since last sync (or last 90 days for new channels)
+            # Red Bar has fewer, longer episodes so we look back further
+            since = channel.last_synced_at or (datetime.utcnow() - timedelta(days=90))
+
+            # Get channel videos
+            videos = await adapter.get_channel_videos(
+                channel.channel_url,
+                max_results=50,
+                since=since,
+            )
+
+            for video in videos:
+                # Check if video already exists
+                existing = await self._get_existing_feed_item(
+                    db, "redbar", video.video_id
+                )
+                if existing:
+                    skipped += 1
+                    continue
+
+                # Create feed item
+                feed_item = FeedItem(
+                    channel_id=channel.id,
+                    platform="redbar",
+                    video_id=video.video_id,
+                    video_url=video.video_url,
+                    title=video.title,
+                    description=video.description,
+                    thumbnail_url=video.thumbnail_url,
+                    duration_seconds=video.duration_seconds,
+                    view_count=video.view_count,
+                    upload_date=video.upload_date or datetime.utcnow(),
+                )
+
+                db.add(feed_item)
+                new_videos += 1
+
+            await db.commit()
+
+            logger.info(f"Red Bar sync complete for {channel.name}: {new_videos} new, {skipped} skipped")
+            return {"success": True, "new_videos": new_videos, "skipped": skipped}
+
+        except Exception as e:
+            logger.warning(f"Red Bar sync error for {channel.name}: {e}")
             return {"success": False, "error": str(e), "new_videos": new_videos}
 
     async def _get_existing_feed_item(
