@@ -18,7 +18,67 @@ export interface VideoItem {
   embedConfig: EmbedConfig;
 }
 
+export interface StreamInfo {
+  video_id: string;
+  platform: string;
+  title?: string;
+  stream_url?: string;
+  audio_url?: string;
+  thumbnail_url?: string;
+  duration_seconds?: number;
+  is_authenticated: boolean;
+  is_premium: boolean;
+  quality?: string;
+  format?: string;
+  error?: string;
+}
+
 export type PlayerMode = 'modal' | 'pip' | 'closed';
+
+// Stream cache for pre-fetched stream URLs
+const streamCache = new Map<string, StreamInfo>();
+
+/**
+ * Fetch and cache stream info for a video
+ */
+async function fetchStreamInfo(platform: string, videoId: string): Promise<StreamInfo | null> {
+  const cacheKey = `${platform}:${videoId}`;
+
+  // Return cached if available
+  if (streamCache.has(cacheKey)) {
+    return streamCache.get(cacheKey)!;
+  }
+
+  try {
+    const response = await fetch(`/api/stream/${platform}/${videoId}`);
+    if (response.ok) {
+      const info = await response.json();
+      streamCache.set(cacheKey, info);
+      return info;
+    }
+  } catch {
+    // Stream API not available
+  }
+  return null;
+}
+
+/**
+ * Get cached stream info (does not fetch)
+ */
+export function getCachedStreamInfo(platform: string, videoId: string): StreamInfo | null {
+  return streamCache.get(`${platform}:${videoId}`) || null;
+}
+
+/**
+ * Pre-fetch stream info for upcoming videos
+ */
+export async function prefetchStreams(videos: VideoItem[]): Promise<void> {
+  const fetchPromises = videos
+    .filter(v => v.platform === 'youtube') // Only YouTube supports direct streams
+    .map(v => fetchStreamInfo(v.platform, v.videoId));
+
+  await Promise.allSettled(fetchPromises);
+}
 
 /**
  * Video player state using Svelte 5 runes
@@ -69,6 +129,16 @@ function createVideoPlayerStore() {
     },
     get videoKey() {
       return videoKey;
+    },
+
+    /**
+     * Get the next N videos in the queue for pre-fetching
+     */
+    getUpcomingVideos(count: number = 2): VideoItem[] {
+      if (queue.length === 0 || currentIndex < 0) return [];
+      const start = currentIndex + 1;
+      const end = Math.min(start + count, queue.length);
+      return queue.slice(start, end);
     },
 
     /**
