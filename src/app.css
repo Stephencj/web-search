@@ -103,6 +103,8 @@ html, body {
   line-height: 1.5;
   color: var(--color-text);
   background-color: var(--color-bg);
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 a {

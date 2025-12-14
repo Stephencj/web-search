@@ -447,27 +447,26 @@ async def _run_metadata_fix_in_background(limit: int):
 
     async with get_session_factory()() as db:
         try:
-            # Find YouTube videos where upload_date is within 2 days of discovered_at
-            # These are likely videos where the fallback was used
-            from sqlalchemy import and_, func as sql_func
-
-            # Get videos where upload and discovered dates are suspiciously close
+            # Find YouTube videos where upload_date is suspiciously close to discovered_at
+            # These are likely videos where the fallback datetime.utcnow() was used
             result = await db.execute(
                 select(FeedItem)
-                .where(
-                    and_(
-                        FeedItem.platform == "youtube",
-                        # Check if upload_date is within 48 hours of discovered_at
-                        sql_func.abs(
-                            sql_func.julianday(FeedItem.upload_date) -
-                            sql_func.julianday(FeedItem.discovered_at)
-                        ) < 2
-                    )
-                )
+                .where(FeedItem.platform == "youtube")
                 .order_by(FeedItem.discovered_at.desc())
-                .limit(limit)
+                .limit(limit * 2)  # Get more, then filter
             )
-            items = list(result.scalars().all())
+            all_items = list(result.scalars().all())
+
+            # Filter items where upload_date is within 48 hours of discovered_at
+            # This is done in Python to avoid database-specific SQL functions
+            items = []
+            for item in all_items:
+                if item.upload_date and item.discovered_at:
+                    diff = abs((item.upload_date - item.discovered_at).total_seconds())
+                    if diff < 172800:  # 48 hours in seconds
+                        items.append(item)
+                        if len(items) >= limit:
+                            break
 
             if not items:
                 logger.info("No videos need metadata fixing")
@@ -520,3 +519,59 @@ async def get_feed_stats(db: DbSession) -> dict:
         "total_channels": total_channels,
         "by_platform": by_platform,
     }
+
+
+@router.get("/history", response_model=FeedResponse)
+async def get_watch_history(
+    db: DbSession,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    include_completed: bool = Query(default=True, description="Include fully watched videos"),
+) -> FeedResponse:
+    """
+    Get watch history - videos that have been played or have progress.
+
+    Returns videos sorted by most recently watched/played first.
+    """
+    from sqlalchemy import or_, and_, case
+
+    # Build query for videos with any watch activity
+    query = (
+        select(FeedItem)
+        .options(selectinload(FeedItem.channel))
+        .where(
+            or_(
+                FeedItem.watch_progress_seconds > 0,
+                FeedItem.is_watched == True,
+                FeedItem.watched_at.isnot(None),
+            )
+        )
+    )
+
+    if not include_completed:
+        # Only show in-progress videos (not fully watched)
+        query = query.where(FeedItem.is_watched == False)
+
+    # Sort by watched_at if available, otherwise by when progress was likely made
+    # Use coalesce to handle null watched_at
+    query = query.order_by(
+        desc(func.coalesce(FeedItem.watched_at, FeedItem.discovered_at))
+    )
+
+    # Get total count
+    count_query = select(func.count()).select_from(query.subquery())
+    total_result = await db.execute(count_query)
+    total = total_result.scalar() or 0
+
+    # Apply pagination
+    query = query.offset(offset).limit(limit)
+
+    result = await db.execute(query)
+    items = list(result.scalars().all())
+
+    return FeedResponse(
+        items=[_feed_item_to_response(item) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )

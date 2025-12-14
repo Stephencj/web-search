@@ -29,6 +29,7 @@
     if (pathname.startsWith('/discover')) return 'Discover';
     if (pathname.startsWith('/saved')) return 'Saved';
     if (pathname.startsWith('/feed')) return 'Feed';
+    if (pathname.startsWith('/history')) return 'History';
     if (pathname.startsWith('/subscriptions')) return 'Subscriptions';
     if (pathname.startsWith('/collections')) return 'Collections';
     if (pathname.startsWith('/indexes')) return 'Indexes';

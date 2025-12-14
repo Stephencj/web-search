@@ -1044,6 +1044,25 @@ class ApiClient {
     return this.request('/feed/stats');
   }
 
+  async fixFeedMetadata(limit: number = 100): Promise<{ status: string; message: string }> {
+    return this.request(`/feed/fix-metadata?limit=${limit}`, { method: 'POST' });
+  }
+
+  async getWatchHistory(params?: {
+    limit?: number;
+    offset?: number;
+    include_completed?: boolean;
+  }): Promise<FeedResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.set('limit', params.limit.toString());
+    if (params?.offset) searchParams.set('offset', params.offset.toString());
+    if (params?.include_completed !== undefined) {
+      searchParams.set('include_completed', params.include_completed.toString());
+    }
+    const query = searchParams.toString();
+    return this.request(`/feed/history${query ? `?${query}` : ''}`);
+  }
+
   // Discover (Federated Search)
   async listPlatforms(): Promise<{ platforms: PlatformInfo[]; total: number }> {
     return this.request('/discover/platforms');

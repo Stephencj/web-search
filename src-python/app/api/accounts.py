@@ -153,6 +153,112 @@ async def oauth_callback(
     )
 
 
+# ============================================================================
+# Red Bar Radio endpoints (session-based auth, not OAuth)
+# IMPORTANT: These routes must come BEFORE /{account_id}/* routes
+# to prevent FastAPI from matching "redbar" as an account_id
+# ============================================================================
+
+
+class RedBarLoginRequest(BaseModel):
+    """Request schema for Red Bar login."""
+    username: str
+    password: str
+
+
+class RedBarLoginResponse(BaseModel):
+    """Response schema for Red Bar login."""
+    success: bool
+    message: str
+    account_id: Optional[int] = None
+    username: Optional[str] = None
+
+
+class RedBarStatusResponse(BaseModel):
+    """Response schema for Red Bar status."""
+    logged_in: bool
+    username: Optional[str] = None
+    expires_at: Optional[str] = None
+    is_premium: Optional[bool] = None
+    last_used: Optional[str] = None
+    error: Optional[str] = None
+
+
+@router.post("/redbar/login", response_model=RedBarLoginResponse)
+async def redbar_login(request: RedBarLoginRequest, db: DbSession) -> RedBarLoginResponse:
+    """
+    Login to Red Bar Radio.
+
+    Authenticates with redbarradio.net and stores session cookies
+    for accessing premium (SCARS CLUB) content.
+    """
+    from app.services.redbar_auth_service import get_redbar_auth_service
+
+    service = get_redbar_auth_service()
+
+    if not service.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Encryption not configured. Set WEBSEARCH_OAUTH__ENCRYPTION_KEY environment variable.",
+        )
+
+    result = await service.login(db, request.username, request.password)
+    return RedBarLoginResponse(**result)
+
+
+@router.get("/redbar/status", response_model=RedBarStatusResponse)
+async def redbar_status(db: DbSession) -> RedBarStatusResponse:
+    """
+    Get Red Bar Radio login status.
+    """
+    from app.services.redbar_auth_service import get_redbar_auth_service
+
+    service = get_redbar_auth_service()
+    result = await service.get_status(db)
+    return RedBarStatusResponse(**result)
+
+
+@router.delete("/redbar")
+async def redbar_logout(db: DbSession) -> dict:
+    """
+    Logout from Red Bar Radio.
+
+    Deletes stored session cookies.
+    """
+    from app.services.redbar_auth_service import get_redbar_auth_service
+
+    service = get_redbar_auth_service()
+    result = await service.logout(db)
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=result.get("message", "Logout failed"),
+        )
+
+    return result
+
+
+@router.post("/redbar/validate")
+async def redbar_validate_session(db: DbSession) -> dict:
+    """
+    Validate Red Bar Radio session.
+
+    Checks if the stored session is still working.
+    """
+    from app.services.redbar_auth_service import get_redbar_auth_service
+
+    service = get_redbar_auth_service()
+    is_valid = await service.validate_session(db)
+
+    return {"valid": is_valid}
+
+
+# ============================================================================
+# Parametric account routes - these must come AFTER /redbar/* routes
+# ============================================================================
+
+
 @router.post("/{account_id}/import-subscriptions", response_model=ImportSubscriptionsResponse)
 async def import_subscriptions(account_id: int, db: DbSession) -> ImportSubscriptionsResponse:
     """
@@ -318,102 +424,3 @@ async def delete_account(account_id: int, db: DbSession) -> dict:
         )
 
     return {"success": True, "message": f"Account {account_id} unlinked successfully"}
-
-
-# ============================================================================
-# Red Bar Radio endpoints (session-based auth, not OAuth)
-# ============================================================================
-
-
-class RedBarLoginRequest(BaseModel):
-    """Request schema for Red Bar login."""
-    username: str
-    password: str
-
-
-class RedBarLoginResponse(BaseModel):
-    """Response schema for Red Bar login."""
-    success: bool
-    message: str
-    account_id: Optional[int] = None
-    username: Optional[str] = None
-
-
-class RedBarStatusResponse(BaseModel):
-    """Response schema for Red Bar status."""
-    logged_in: bool
-    username: Optional[str] = None
-    expires_at: Optional[str] = None
-    is_premium: Optional[bool] = None
-    last_used: Optional[str] = None
-    error: Optional[str] = None
-
-
-@router.post("/redbar/login", response_model=RedBarLoginResponse)
-async def redbar_login(request: RedBarLoginRequest, db: DbSession) -> RedBarLoginResponse:
-    """
-    Login to Red Bar Radio.
-
-    Authenticates with redbarradio.net and stores session cookies
-    for accessing premium (SCARS CLUB) content.
-    """
-    from app.services.redbar_auth_service import get_redbar_auth_service
-
-    service = get_redbar_auth_service()
-
-    if not service.is_configured():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Encryption not configured. Set WEBSEARCH_OAUTH__ENCRYPTION_KEY environment variable.",
-        )
-
-    result = await service.login(db, request.username, request.password)
-    return RedBarLoginResponse(**result)
-
-
-@router.get("/redbar/status", response_model=RedBarStatusResponse)
-async def redbar_status(db: DbSession) -> RedBarStatusResponse:
-    """
-    Get Red Bar Radio login status.
-    """
-    from app.services.redbar_auth_service import get_redbar_auth_service
-
-    service = get_redbar_auth_service()
-    result = await service.get_status(db)
-    return RedBarStatusResponse(**result)
-
-
-@router.delete("/redbar")
-async def redbar_logout(db: DbSession) -> dict:
-    """
-    Logout from Red Bar Radio.
-
-    Deletes stored session cookies.
-    """
-    from app.services.redbar_auth_service import get_redbar_auth_service
-
-    service = get_redbar_auth_service()
-    result = await service.logout(db)
-
-    if not result.get("success"):
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=result.get("message", "Logout failed"),
-        )
-
-    return result
-
-
-@router.post("/redbar/validate")
-async def redbar_validate_session(db: DbSession) -> dict:
-    """
-    Validate Red Bar Radio session.
-
-    Checks if the stored session is still working.
-    """
-    from app.services.redbar_auth_service import get_redbar_auth_service
-
-    service = get_redbar_auth_service()
-    is_valid = await service.validate_session(db)
-
-    return {"valid": is_valid}
