@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, status, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from app.api.deps import DbSession
+from app.api.deps import DbSession, CurrentUserOrDefault
 from app.services.oauth_service import get_oauth_service
 
 
@@ -260,9 +260,9 @@ async def redbar_validate_session(db: DbSession) -> dict:
 
 
 @router.post("/{account_id}/import-subscriptions", response_model=ImportSubscriptionsResponse)
-async def import_subscriptions(account_id: int, db: DbSession) -> ImportSubscriptionsResponse:
+async def import_subscriptions(account_id: int, db: DbSession, user: CurrentUserOrDefault) -> ImportSubscriptionsResponse:
     """
-    Import YouTube subscriptions from a linked account.
+    Import YouTube subscriptions from a linked account for the current user.
 
     Fetches all subscriptions from the YouTube API and imports them as channels.
     Existing channels are skipped (duplicates handled automatically).
@@ -291,8 +291,8 @@ async def import_subscriptions(account_id: int, db: DbSession) -> ImportSubscrip
     service = get_oauth_service()
 
     try:
-        logger.info(f"Starting subscription import for {account.account_email}")
-        import_result = await service.import_youtube_subscriptions(db, account)
+        logger.info(f"Starting subscription import for {account.account_email} (user {user.id})")
+        import_result = await service.import_youtube_subscriptions(db, account, user_id=user.id)
         logger.info(f"Import complete: {import_result}")
         return ImportSubscriptionsResponse(
             imported=import_result.get("imported", 0),

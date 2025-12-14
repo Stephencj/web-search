@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, status, Query
 
-from app.api.deps import DbSession
+from app.api.deps import DbSession, CurrentUserOrDefault
 from app.models import Channel
 from app.schemas.channel import (
     ChannelCreate,
@@ -52,12 +52,13 @@ def _channel_to_response(channel: Channel) -> ChannelResponse:
 @router.get("", response_model=ChannelListResponse)
 async def list_channels(
     db: DbSession,
+    user: CurrentUserOrDefault,
     platform: Optional[str] = Query(None, description="Filter by platform (youtube, rumble)"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
 ) -> ChannelListResponse:
-    """List all subscribed channels."""
+    """List all subscribed channels for the current user."""
     service = get_channel_service()
-    channels = await service.list_channels(db, platform=platform, is_active=is_active)
+    channels = await service.list_channels(db, platform=platform, is_active=is_active, user_id=user.id)
 
     return ChannelListResponse(
         items=[_channel_to_response(c) for c in channels],
@@ -102,16 +103,16 @@ async def search_channels(
 
 
 @router.post("", response_model=ChannelResponse, status_code=status.HTTP_201_CREATED)
-async def add_channel(data: ChannelCreate, db: DbSession) -> ChannelResponse:
+async def add_channel(data: ChannelCreate, db: DbSession, user: CurrentUserOrDefault) -> ChannelResponse:
     """
-    Add a new channel subscription by URL.
+    Add a new channel subscription by URL for the current user.
 
     Supports YouTube and Rumble channel URLs.
     """
     service = get_channel_service()
 
     try:
-        channel = await service.add_channel(db, data.channel_url, import_source="manual")
+        channel = await service.add_channel(db, data.channel_url, import_source="manual", user_id=user.id)
         return _channel_to_response(channel)
     except ValueError as e:
         raise HTTPException(
@@ -121,10 +122,10 @@ async def add_channel(data: ChannelCreate, db: DbSession) -> ChannelResponse:
 
 
 @router.get("/{channel_id}", response_model=ChannelResponse)
-async def get_channel(channel_id: int, db: DbSession) -> ChannelResponse:
+async def get_channel(channel_id: int, db: DbSession, user: CurrentUserOrDefault) -> ChannelResponse:
     """Get a channel by ID."""
     service = get_channel_service()
-    channel = await service.get_channel(db, channel_id)
+    channel = await service.get_channel(db, channel_id, user_id=user.id)
 
     if not channel:
         raise HTTPException(
@@ -140,12 +141,13 @@ async def update_channel(
     channel_id: int,
     data: ChannelUpdate,
     db: DbSession,
+    user: CurrentUserOrDefault,
 ) -> ChannelResponse:
     """Update a channel."""
     service = get_channel_service()
 
     update_data = data.model_dump(exclude_unset=True)
-    channel = await service.update_channel(db, channel_id, **update_data)
+    channel = await service.update_channel(db, channel_id, user_id=user.id, **update_data)
 
     if not channel:
         raise HTTPException(
@@ -157,10 +159,10 @@ async def update_channel(
 
 
 @router.delete("/{channel_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_channel(channel_id: int, db: DbSession) -> None:
+async def delete_channel(channel_id: int, db: DbSession, user: CurrentUserOrDefault) -> None:
     """Delete a channel subscription."""
     service = get_channel_service()
-    deleted = await service.delete_channel(db, channel_id)
+    deleted = await service.delete_channel(db, channel_id, user_id=user.id)
 
     if not deleted:
         raise HTTPException(
@@ -170,14 +172,14 @@ async def delete_channel(channel_id: int, db: DbSession) -> None:
 
 
 @router.post("/{channel_id}/sync", response_model=SyncResult)
-async def sync_channel(channel_id: int, db: DbSession) -> SyncResult:
+async def sync_channel(channel_id: int, db: DbSession, user: CurrentUserOrDefault) -> SyncResult:
     """
     Manually trigger a sync for a channel.
 
     Fetches new videos from the channel.
     """
     service = get_channel_service()
-    channel = await service.get_channel(db, channel_id)
+    channel = await service.get_channel(db, channel_id, user_id=user.id)
 
     if not channel:
         raise HTTPException(
@@ -201,14 +203,14 @@ async def sync_channel(channel_id: int, db: DbSession) -> SyncResult:
 
 
 @router.post("/import/urls", response_model=ImportResult)
-async def import_from_urls(data: ChannelImportUrl, db: DbSession) -> ImportResult:
+async def import_from_urls(data: ChannelImportUrl, db: DbSession, user: CurrentUserOrDefault) -> ImportResult:
     """
-    Import channels from a list of URLs.
+    Import channels from a list of URLs for the current user.
 
     Useful for importing from a bookmarklet or manual list.
     """
     service = get_channel_service()
-    result = await service.import_from_urls(db, data.urls, import_source="bookmarklet")
+    result = await service.import_from_urls(db, data.urls, import_source="bookmarklet", user_id=user.id)
 
     return ImportResult(
         imported=result["imported"],
@@ -220,14 +222,14 @@ async def import_from_urls(data: ChannelImportUrl, db: DbSession) -> ImportResul
 
 
 @router.post("/import/takeout", response_model=ImportResult)
-async def import_from_takeout(data: ChannelImportTakeout, db: DbSession) -> ImportResult:
+async def import_from_takeout(data: ChannelImportTakeout, db: DbSession, user: CurrentUserOrDefault) -> ImportResult:
     """
-    Import channels from Google Takeout subscriptions export.
+    Import channels from Google Takeout subscriptions export for the current user.
 
     Upload the subscriptions.json content from Google Takeout.
     """
     service = get_channel_service()
-    result = await service.import_from_takeout(db, data.subscriptions)
+    result = await service.import_from_takeout(db, data.subscriptions, user_id=user.id)
 
     return ImportResult(
         imported=result["imported"],

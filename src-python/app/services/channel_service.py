@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crawler.url_detector import (
@@ -18,6 +18,7 @@ from app.core.crawler.url_detector import (
 )
 from app.core.crawler.youtube_types import YouTubeUrlType
 from app.models import Channel
+from app.models.user import User
 
 
 class ChannelService:
@@ -29,6 +30,7 @@ class ChannelService:
         url: str,
         import_source: str = "manual",
         pre_metadata: Optional[dict] = None,
+        user_id: Optional[int] = None,
     ) -> Channel:
         """
         Add a new channel subscription.
@@ -38,6 +40,7 @@ class ChannelService:
             url: Channel URL (YouTube or Rumble)
             import_source: How the channel was added ("manual", "takeout", "bookmarklet")
             pre_metadata: Optional pre-fetched metadata (skips yt-dlp fetch)
+            user_id: User ID for per-user subscriptions
 
         Returns:
             Created Channel
@@ -59,9 +62,9 @@ class ChannelService:
                     raise ValueError(f"URL is not a channel URL: {url}")
             raise ValueError(f"Could not extract channel ID from URL: {url}")
 
-        # Check if channel already exists
+        # Check if channel already exists for this user
         existing = await self.get_channel_by_platform_id(
-            db, platform.value, channel_id
+            db, platform.value, channel_id, user_id=user_id
         )
         if existing:
             logger.info(f"Channel already exists: {existing.name}")
@@ -84,13 +87,14 @@ class ChannelService:
             banner_url=metadata.get("banner_url"),
             subscriber_count=metadata.get("subscriber_count"),
             import_source=import_source,
+            user_id=user_id,
         )
 
         db.add(channel)
         await db.commit()
         await db.refresh(channel)
 
-        logger.info(f"Added channel: {channel.name} ({platform.value})")
+        logger.info(f"Added channel: {channel.name} ({platform.value}) for user {user_id}")
         return channel
 
     async def import_from_urls(
@@ -99,6 +103,7 @@ class ChannelService:
         urls: list[str],
         import_source: str = "bookmarklet",
         metadata_map: Optional[dict[str, dict]] = None,
+        user_id: Optional[int] = None,
     ) -> dict:
         """
         Import multiple channels from a list of URLs.
@@ -108,6 +113,7 @@ class ChannelService:
             urls: List of channel URLs
             import_source: Import source identifier
             metadata_map: Optional dict mapping URL -> metadata dict (skips yt-dlp fetch)
+            user_id: User ID for per-user subscriptions
 
         Returns:
             Dict with imported, skipped, failed counts and details
@@ -126,7 +132,7 @@ class ChannelService:
             try:
                 # Check if we have pre-fetched metadata for this URL
                 pre_metadata = metadata_map.get(url)
-                channel = await self.add_channel(db, url, import_source, pre_metadata=pre_metadata)
+                channel = await self.add_channel(db, url, import_source, pre_metadata=pre_metadata, user_id=user_id)
                 if channel.created_at.replace(microsecond=0) == channel.updated_at.replace(microsecond=0):
                     # Newly created
                     imported.append(channel)
@@ -157,6 +163,7 @@ class ChannelService:
         self,
         db: AsyncSession,
         subscriptions: list[dict],
+        user_id: Optional[int] = None,
     ) -> dict:
         """
         Import channels from Google Takeout subscriptions JSON.
@@ -164,6 +171,7 @@ class ChannelService:
         Args:
             db: Database session
             subscriptions: List of subscription entries from Takeout
+            user_id: User ID for per-user subscriptions
 
         Returns:
             Dict with imported, skipped, failed counts and details
@@ -199,17 +207,19 @@ class ChannelService:
                 logger.warning(f"Failed to parse Takeout entry: {e}")
                 continue
 
-        return await self.import_from_urls(db, urls, import_source="takeout")
+        return await self.import_from_urls(db, urls, import_source="takeout", user_id=user_id)
 
     async def get_channel(
         self,
         db: AsyncSession,
         channel_id: int,
+        user_id: Optional[int] = None,
     ) -> Optional[Channel]:
-        """Get a channel by ID."""
-        result = await db.execute(
-            select(Channel).where(Channel.id == channel_id)
-        )
+        """Get a channel by ID, filtered by user."""
+        query = select(Channel).where(Channel.id == channel_id)
+        if user_id is not None:
+            query = query.where(or_(Channel.user_id == user_id, Channel.user_id.is_(None)))
+        result = await db.execute(query)
         return result.scalar_one_or_none()
 
     async def get_channel_by_platform_id(
@@ -217,14 +227,16 @@ class ChannelService:
         db: AsyncSession,
         platform: str,
         platform_channel_id: str,
+        user_id: Optional[int] = None,
     ) -> Optional[Channel]:
-        """Get a channel by platform and platform channel ID."""
-        result = await db.execute(
-            select(Channel).where(
-                Channel.platform == platform,
-                Channel.platform_channel_id == platform_channel_id,
-            )
+        """Get a channel by platform and platform channel ID for a specific user."""
+        query = select(Channel).where(
+            Channel.platform == platform,
+            Channel.platform_channel_id == platform_channel_id,
         )
+        if user_id is not None:
+            query = query.where(Channel.user_id == user_id)
+        result = await db.execute(query)
         return result.scalar_one_or_none()
 
     async def list_channels(
@@ -232,20 +244,24 @@ class ChannelService:
         db: AsyncSession,
         platform: Optional[str] = None,
         is_active: Optional[bool] = None,
+        user_id: Optional[int] = None,
     ) -> list[Channel]:
         """
-        List all channels, optionally filtered.
+        List all channels for a user, optionally filtered.
 
         Args:
             db: Database session
             platform: Filter by platform ("youtube", "rumble")
             is_active: Filter by active status
+            user_id: Filter by user (includes channels with no user)
 
         Returns:
             List of channels
         """
         query = select(Channel).order_by(Channel.name)
 
+        if user_id is not None:
+            query = query.where(or_(Channel.user_id == user_id, Channel.user_id.is_(None)))
         if platform:
             query = query.where(Channel.platform == platform)
         if is_active is not None:
@@ -258,6 +274,7 @@ class ChannelService:
         self,
         db: AsyncSession,
         channel_id: int,
+        user_id: Optional[int] = None,
         **kwargs,
     ) -> Optional[Channel]:
         """
@@ -266,12 +283,13 @@ class ChannelService:
         Args:
             db: Database session
             channel_id: Channel ID
+            user_id: User ID for permission check
             **kwargs: Fields to update
 
         Returns:
             Updated channel or None if not found
         """
-        channel = await self.get_channel(db, channel_id)
+        channel = await self.get_channel(db, channel_id, user_id=user_id)
         if not channel:
             return None
 
@@ -287,6 +305,7 @@ class ChannelService:
         self,
         db: AsyncSession,
         channel_id: int,
+        user_id: Optional[int] = None,
     ) -> bool:
         """
         Delete a channel and all its feed items.
@@ -294,11 +313,12 @@ class ChannelService:
         Args:
             db: Database session
             channel_id: Channel ID
+            user_id: User ID for permission check
 
         Returns:
             True if deleted, False if not found
         """
-        channel = await self.get_channel(db, channel_id)
+        channel = await self.get_channel(db, channel_id, user_id=user_id)
         if not channel:
             return False
 

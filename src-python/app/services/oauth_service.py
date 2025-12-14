@@ -562,9 +562,15 @@ class OAuthService:
         self,
         db: AsyncSession,
         account: PlatformAccount,
+        user_id: Optional[int] = None,
     ) -> dict:
         """
-        Fetch and import all YouTube subscriptions as channels.
+        Fetch and import all YouTube subscriptions as channels for a user.
+
+        Args:
+            db: Database session
+            account: PlatformAccount to fetch subscriptions from
+            user_id: User ID to associate imported channels with
 
         Returns:
             Dict with import results (imported, skipped, failed counts)
@@ -593,12 +599,12 @@ class OAuthService:
         # Import using channel service with pre-fetched metadata (fast!)
         channel_service = get_channel_service()
         result = await channel_service.import_from_urls(
-            db, urls, import_source="youtube_oauth", metadata_map=metadata_map
+            db, urls, import_source="youtube_oauth", metadata_map=metadata_map, user_id=user_id
         )
 
         result["total_found"] = len(subscriptions)
         logger.info(
-            f"YouTube subscription import complete: "
+            f"YouTube subscription import complete for user {user_id}: "
             f"{result['imported']} imported, {result['skipped']} skipped, "
             f"{result['failed']} failed (from {len(subscriptions)} total)"
         )

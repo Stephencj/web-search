@@ -1,17 +1,60 @@
 """Settings API endpoints."""
 
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import DbSession
 from app.config import get_settings
 from app.models import ApiKey
 from app.services.settings_service import get_settings_service
+from app.services.user_service import get_user_service
+from app.services.network_service import get_network_service
 from app.schemas.settings import (
     ApiKeyCreate,
     ApiKeyResponse,
     CrawlerSettingsUpdate,
 )
+
+
+# Network settings schemas
+class NetworkInfoResponse(BaseModel):
+    """Network information response."""
+    local_ip: str
+    local_url: str
+    external_ip: Optional[str]
+    external_url: Optional[str]
+    external_mode: str
+
+
+class SetExternalModeRequest(BaseModel):
+    """Set external URL mode request."""
+    mode: str  # "auto", "manual", or "disabled"
+
+
+class SetExternalUrlRequest(BaseModel):
+    """Set manual external URL request."""
+    url: Optional[str]
+
+
+class SetAuthModeRequest(BaseModel):
+    """Set auth mode request."""
+    mode: str  # "open" or "protected"
+
+
+class QrCodeResponse(BaseModel):
+    """QR code response."""
+    url: str
+    qr_code_data: Optional[str]
+
+
+class TestAccessResponse(BaseModel):
+    """Test external access response."""
+    success: bool
+    status_code: Optional[int]
+    message: str
 
 router = APIRouter()
 settings_service = get_settings_service()
@@ -166,3 +209,109 @@ async def delete_api_key(provider: str, db: DbSession) -> None:
         )
 
     await db.delete(key)
+
+
+# === Network Settings ===
+
+@router.get("/network", response_model=NetworkInfoResponse)
+async def get_network_info(db: DbSession) -> NetworkInfoResponse:
+    """Get network access information."""
+    network_service = get_network_service()
+    info = await network_service.get_access_urls(db)
+    return NetworkInfoResponse(**info)
+
+
+@router.put("/network/external-mode")
+async def set_external_mode(
+    request: SetExternalModeRequest,
+    db: DbSession,
+) -> dict:
+    """Set external URL mode (auto/manual/disabled)."""
+    network_service = get_network_service()
+    try:
+        await network_service.set_external_url_mode(db, request.mode)
+        return {"success": True, "mode": request.mode}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/network/external-url")
+async def set_external_url(
+    request: SetExternalUrlRequest,
+    db: DbSession,
+) -> dict:
+    """Set manual external URL."""
+    network_service = get_network_service()
+    await network_service.set_manual_external_url(db, request.url)
+    return {"success": True, "url": request.url}
+
+
+@router.get("/network/qr-code", response_model=QrCodeResponse)
+async def get_qr_code(
+    db: DbSession,
+    url_type: str = "local",  # "local" or "external"
+) -> QrCodeResponse:
+    """Generate QR code for app access URL."""
+    network_service = get_network_service()
+    info = await network_service.get_access_urls(db)
+
+    if url_type == "external" and info.get("external_url"):
+        url = info["external_url"]
+    else:
+        url = info["local_url"]
+
+    qr_data = network_service.generate_qr_code_data(url)
+    return QrCodeResponse(url=url, qr_code_data=qr_data)
+
+
+@router.post("/network/test-access", response_model=TestAccessResponse)
+async def test_external_access(
+    db: DbSession,
+    url: Optional[str] = None,
+) -> TestAccessResponse:
+    """Test if external URL is accessible."""
+    network_service = get_network_service()
+
+    if not url:
+        info = await network_service.get_access_urls(db)
+        url = info.get("external_url")
+        if not url:
+            return TestAccessResponse(
+                success=False,
+                status_code=None,
+                message="No external URL configured",
+            )
+
+    result = await network_service.test_external_access(url)
+    return TestAccessResponse(**result)
+
+
+@router.get("/network/port-forwarding-help")
+async def get_port_forwarding_help() -> dict:
+    """Get port forwarding setup instructions."""
+    network_service = get_network_service()
+    return network_service.get_port_forwarding_instructions()
+
+
+# === Auth Mode Settings ===
+
+@router.get("/auth-mode")
+async def get_auth_mode_setting(db: DbSession) -> dict:
+    """Get current auth mode."""
+    user_service = get_user_service()
+    mode = await user_service.get_auth_mode(db)
+    return {"mode": mode}
+
+
+@router.put("/auth-mode")
+async def set_auth_mode_setting(
+    request: SetAuthModeRequest,
+    db: DbSession,
+) -> dict:
+    """Set auth mode (open/protected)."""
+    user_service = get_user_service()
+    try:
+        await user_service.set_auth_mode(db, request.mode)
+        return {"success": True, "mode": request.mode}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

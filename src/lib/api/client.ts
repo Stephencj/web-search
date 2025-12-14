@@ -579,6 +579,17 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
+  private getAuthHeaders(): Record<string, string> {
+    // Get auth token from localStorage for authenticated requests
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('session_token');
+      if (token) {
+        return { 'Authorization': `Bearer ${token}` };
+      }
+    }
+    return {};
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -588,6 +599,7 @@ class ApiClient {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...this.getAuthHeaders(),
         ...options.headers,
       },
     });

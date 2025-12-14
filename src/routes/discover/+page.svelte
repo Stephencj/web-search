@@ -1,14 +1,15 @@
 <script lang="ts">
-  import { api, type PlatformInfo, type DiscoverVideoResult, type DiscoverChannelResult, type SearchTiming, type FeedItem } from '$lib/api/client';
-  import { videoPlayer, discoverVideoToVideoItem, formatDuration, feedItemToVideoItem, openFeedVideo } from '$lib/stores/videoPlayer.svelte';
+  import { api, type PlatformInfo, type DiscoverVideoResult, type DiscoverChannelResult, type SearchTiming } from '$lib/api/client';
+  import { videoPlayer, discoverVideoToVideoItem, formatDuration } from '$lib/stores/videoPlayer.svelte';
   import SaveButton from '$lib/components/SaveButton/SaveButton.svelte';
 
   // State
   let platforms = $state<PlatformInfo[]>([]);
-  let selectedPlatforms = $state<Set<string>>(new Set());
+  let selectedPlatforms = $state<Set<string>>(new Set(['youtube']));
   let searchQuery = $state('');
   let searchType = $state<'videos' | 'channels'>('videos');
   let searching = $state(false);
+  let loadingMore = $state(false);
   let videoResults = $state<DiscoverVideoResult[]>([]);
   let channelResults = $state<DiscoverChannelResult[]>([]);
   let timings = $state<SearchTiming[]>([]);
@@ -20,19 +21,27 @@
   let saveSuccess = $state<string | null>(null);
   let savedVideoIds = $state<Set<string>>(new Set());
 
-  // Mood browsing state
-  type MoodType = 'focus_learning' | 'stay_positive' | 'music_mode' | 'news_politics' | 'gaming';
-  const MOOD_OPTIONS: { id: MoodType; label: string; icon: string; description: string }[] = [
-    { id: 'focus_learning', label: 'Focus & Learning', icon: '📚', description: 'Education, Science, How-to' },
-    { id: 'stay_positive', label: 'Stay Positive', icon: '😄', description: 'Comedy, Entertainment' },
-    { id: 'music_mode', label: 'Music Mode', icon: '🎵', description: 'Music videos & performances' },
-    { id: 'news_politics', label: 'News & Politics', icon: '📰', description: 'Current events, Politics' },
-    { id: 'gaming', label: 'Gaming', icon: '🎮', description: 'Gaming content' },
+  // Pagination for infinite scroll
+  let currentPage = $state(1);
+  let hasMore = $state(true);
+  let resultsPerPage = 20;
+
+  // Mood/category state - influences search queries
+  type MoodType = 'focus_learning' | 'stay_positive' | 'music_mode' | 'news_politics' | 'gaming' | null;
+  const MOOD_OPTIONS: { id: Exclude<MoodType, null>; label: string; icon: string; description: string; searchTerms: string[] }[] = [
+    { id: 'focus_learning', label: 'Focus & Learning', icon: '📚', description: 'Education, Science, How-to',
+      searchTerms: ['educational documentary', 'science explained', 'how to tutorial', 'learn new skill', 'TED talk', 'deep dive', 'explained'] },
+    { id: 'stay_positive', label: 'Stay Positive', icon: '😄', description: 'Comedy, Entertainment',
+      searchTerms: ['comedy sketch', 'funny compilation', 'stand up comedy', 'wholesome content', 'feel good video', 'comedy show', 'funny moments'] },
+    { id: 'music_mode', label: 'Music Mode', icon: '🎵', description: 'Music videos & performances',
+      searchTerms: ['music video official', 'live performance concert', 'acoustic cover', 'new music 2024', 'music mix', 'live session', 'music reaction'] },
+    { id: 'news_politics', label: 'News & Politics', icon: '📰', description: 'Current events, Politics',
+      searchTerms: ['news analysis', 'political commentary', 'current events', 'interview politics', 'documentary news', 'breaking news', 'political debate'] },
+    { id: 'gaming', label: 'Gaming', icon: '🎮', description: 'Gaming content',
+      searchTerms: ['gameplay walkthrough', 'gaming highlights', 'game review', 'esports', 'lets play', 'game stream', 'gaming news'] },
   ];
-  let selectedMood = $state<MoodType | null>(null);
-  let moodVideos = $state<FeedItem[]>([]);
-  let loadingMood = $state(false);
-  let moodError = $state<string | null>(null);
+  let selectedMood = $state<MoodType>(null);
+  let lastSearchTerm = $state<string>('');
 
   // Load platforms on mount
   $effect(() => {
@@ -43,8 +52,6 @@
     try {
       const response = await api.listPlatforms();
       platforms = response.platforms;
-      // Select all searchable platforms by default
-      selectedPlatforms = new Set(platforms.filter(p => p.supports_search).map(p => p.id));
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load platforms';
     }
@@ -64,44 +71,94 @@
     selectedPlatforms = new Set(platforms.filter(p => p.supports_search).map(p => p.id));
   }
 
-  async function handleSearch() {
-    if (!searchQuery.trim()) return;
+  function getSearchQuery(): string {
+    // Combine user query with mood-based search term
+    const moodConfig = selectedMood ? MOOD_OPTIONS.find(m => m.id === selectedMood) : null;
+    let query = searchQuery.trim();
+
+    if (moodConfig) {
+      // Pick a random search term from the mood's terms
+      const randomTerm = moodConfig.searchTerms[Math.floor(Math.random() * moodConfig.searchTerms.length)];
+      query = query ? `${query} ${randomTerm}` : randomTerm;
+    }
+
+    return query;
+  }
+
+  async function handleSearch(append: boolean = false) {
+    const query = getSearchQuery();
+    if (!query) {
+      if (!selectedMood) {
+        error = 'Enter a search query or select a mood to discover content';
+        return;
+      }
+    }
+
     if (selectedPlatforms.size === 0) {
       error = 'Please select at least one platform';
       return;
     }
 
-    searching = true;
+    if (append) {
+      loadingMore = true;
+    } else {
+      searching = true;
+      videoResults = [];
+      channelResults = [];
+      currentPage = 1;
+      hasMore = true;
+      lastSearchTerm = query;
+    }
     error = null;
-    videoResults = [];
-    channelResults = [];
 
     try {
       const platformList = Array.from(selectedPlatforms);
+      const maxPerPlatform = resultsPerPage;
 
       if (searchType === 'videos') {
         const response = await api.discoverVideos({
-          query: searchQuery,
+          query: append ? lastSearchTerm : query,
           platforms: platformList,
-          max_per_platform: 10,
+          max_per_platform: maxPerPlatform,
         });
-        videoResults = response.results;
+
+        if (append) {
+          // Filter out duplicates when appending
+          const existingIds = new Set(videoResults.map(v => `${v.platform}:${v.video_id}`));
+          const newResults = response.results.filter(v => !existingIds.has(`${v.platform}:${v.video_id}`));
+          videoResults = [...videoResults, ...newResults];
+          hasMore = newResults.length >= maxPerPlatform / 2;
+        } else {
+          videoResults = response.results;
+          hasMore = response.results.length >= maxPerPlatform;
+        }
         timings = response.timings;
         totalDuration = response.total_duration_ms;
       } else {
         const response = await api.discoverChannels({
-          query: searchQuery,
+          query: append ? lastSearchTerm : query,
           platforms: platformList,
-          max_per_platform: 10,
+          max_per_platform: maxPerPlatform,
         });
-        channelResults = response.results;
+
+        if (append) {
+          const existingIds = new Set(channelResults.map(c => `${c.platform}:${c.channel_id}`));
+          const newResults = response.results.filter(c => !existingIds.has(`${c.platform}:${c.channel_id}`));
+          channelResults = [...channelResults, ...newResults];
+          hasMore = newResults.length >= maxPerPlatform / 2;
+        } else {
+          channelResults = response.results;
+          hasMore = response.results.length >= maxPerPlatform;
+        }
         timings = response.timings;
         totalDuration = response.total_duration_ms;
       }
+      currentPage++;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Search failed';
     } finally {
       searching = false;
+      loadingMore = false;
     }
   }
 
@@ -109,6 +166,32 @@
     if (event.key === 'Enter') {
       handleSearch();
     }
+  }
+
+  function loadMore() {
+    if (!loadingMore && hasMore) {
+      handleSearch(true);
+    }
+  }
+
+  function selectMood(mood: MoodType) {
+    if (selectedMood === mood) {
+      selectedMood = null;
+    } else {
+      selectedMood = mood;
+      // Automatically search when mood is selected
+      handleSearch();
+    }
+  }
+
+  function clearResults() {
+    videoResults = [];
+    channelResults = [];
+    selectedMood = null;
+    searchQuery = '';
+    error = null;
+    hasMore = true;
+    currentPage = 1;
   }
 
   async function subscribeToChannel(channelUrl: string, channelName: string) {
@@ -203,61 +286,16 @@
     setTimeout(() => collectionSaveSuccess = null, 3000);
   }
 
-  async function selectMood(mood: MoodType) {
-    if (selectedMood === mood) {
-      // Deselect if clicking same mood
-      selectedMood = null;
-      moodVideos = [];
-      return;
-    }
-
-    selectedMood = mood;
-    loadingMood = true;
-    moodError = null;
-    moodVideos = [];
-
-    try {
-      const response = await api.getFeed({
-        mode: mood,
-        per_page: 20,
-      });
-      moodVideos = response.items;
-      if (moodVideos.length === 0) {
-        moodError = `No ${MOOD_OPTIONS.find(m => m.id === mood)?.label} videos found in your subscriptions. Videos need category data - try running "Fix Dates" in Settings to fetch categories.`;
-      }
-    } catch (e) {
-      moodError = e instanceof Error ? e.message : 'Failed to load videos';
-    } finally {
-      loadingMood = false;
-    }
-  }
-
-  function playMoodVideo(item: FeedItem) {
-    // Build queue from mood videos
-    const videoQueue = moodVideos.map(v => feedItemToVideoItem(v));
-    const videoIndex = moodVideos.findIndex(v => v.id === item.id);
-    videoPlayer.openWithQueue(videoQueue, videoIndex >= 0 ? videoIndex : 0);
-  }
-
-  function clearMood() {
-    selectedMood = null;
-    moodVideos = [];
-    moodError = null;
-  }
 </script>
 
 <div class="discover-page">
   <header class="page-header">
     <h1>Discover</h1>
-    <p class="subtitle">Search across multiple video platforms</p>
+    <p class="subtitle">Find new content across multiple video platforms</p>
   </header>
 
-  <!-- Browse by Mood Section -->
+  <!-- Mood/Category Quick Filters -->
   <div class="mood-section">
-    <div class="section-header">
-      <h2>Browse by Mood</h2>
-      <span class="section-subtitle">Quick access to videos from your subscriptions by category</span>
-    </div>
     <div class="mood-buttons">
       {#each MOOD_OPTIONS as mood}
         <button
@@ -267,65 +305,14 @@
         >
           <span class="mood-icon">{mood.icon}</span>
           <span class="mood-label">{mood.label}</span>
-          <span class="mood-desc">{mood.description}</span>
         </button>
       {/each}
     </div>
-
-    {#if loadingMood}
-      <div class="mood-loading">
-        <div class="loading-spinner"></div>
-        <span>Loading {MOOD_OPTIONS.find(m => m.id === selectedMood)?.label} videos...</span>
-      </div>
-    {:else if moodError}
-      <div class="mood-error">{moodError}</div>
-    {:else if moodVideos.length > 0}
-      <div class="mood-results">
-        <div class="mood-results-header">
-          <span class="mood-count">{moodVideos.length} videos</span>
-          <button class="clear-mood-btn" onclick={clearMood}>Clear</button>
-        </div>
-        <div class="mood-video-grid">
-          {#each moodVideos as item}
-            <div class="mood-video-card">
-              <button class="mood-thumbnail" onclick={() => playMoodVideo(item)}>
-                {#if item.thumbnail_url}
-                  <img src={item.thumbnail_url} alt={item.title} loading="lazy" />
-                {:else}
-                  <div class="no-thumbnail">No Thumbnail</div>
-                {/if}
-                <div class="play-overlay">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                </div>
-                {#if item.duration_seconds}
-                  <span class="duration">{formatDuration(item.duration_seconds)}</span>
-                {/if}
-              </button>
-              <div class="mood-video-info">
-                <span class="mood-video-title" title={item.title}>{item.title}</span>
-                <span class="mood-video-channel">{item.channel_name}</span>
-              </div>
-            </div>
-          {/each}
-        </div>
-      </div>
-    {/if}
   </div>
 
-  <div class="section-divider"></div>
-
-  <!-- Platform Toggles -->
-  <div class="platform-section">
-    <div class="section-header">
-      <h2>Search Across Platforms</h2>
-      <span class="section-subtitle">Search for new content across multiple video platforms</span>
-    </div>
-    <div class="platform-header">
-      <span class="platform-label">Platforms:</span>
-      <button class="select-all-btn" onclick={selectAllPlatforms}>Select All</button>
-    </div>
+  <!-- Search Controls -->
+  <div class="search-controls">
+    <!-- Platform Toggles -->
     <div class="platform-toggles">
       {#each platforms.filter(p => p.supports_search) as platform}
         <button
@@ -338,39 +325,38 @@
           <span class="platform-name">{platform.name}</span>
         </button>
       {/each}
+      <button class="select-all-btn" onclick={selectAllPlatforms}>All</button>
     </div>
-  </div>
 
-  <!-- Search Bar -->
-  <div class="search-section">
-    <div class="search-type-tabs">
-      <button
-        class="type-tab"
-        class:active={searchType === 'videos'}
-        onclick={() => searchType = 'videos'}
-      >
-        Videos
-      </button>
-      <button
-        class="type-tab"
-        class:active={searchType === 'channels'}
-        onclick={() => searchType = 'channels'}
-      >
-        Channels
-      </button>
-    </div>
+    <!-- Search Bar -->
     <div class="search-bar">
+      <div class="search-type-tabs">
+        <button
+          class="type-tab"
+          class:active={searchType === 'videos'}
+          onclick={() => searchType = 'videos'}
+        >
+          Videos
+        </button>
+        <button
+          class="type-tab"
+          class:active={searchType === 'channels'}
+          onclick={() => searchType = 'channels'}
+        >
+          Channels
+        </button>
+      </div>
       <input
         type="text"
-        placeholder="Search across all selected platforms..."
+        placeholder={selectedMood ? `Search within ${MOOD_OPTIONS.find(m => m.id === selectedMood)?.label || 'mood'}...` : 'Search across platforms...'}
         bind:value={searchQuery}
         onkeydown={handleKeydown}
         class="search-input"
       />
       <button
         class="search-btn"
-        onclick={handleSearch}
-        disabled={searching || !searchQuery.trim()}
+        onclick={() => handleSearch()}
+        disabled={searching || (!searchQuery.trim() && !selectedMood)}
       >
         {searching ? 'Searching...' : 'Search'}
       </button>
@@ -419,7 +405,12 @@
         <span>Searching across {selectedPlatforms.size} platforms...</span>
       </div>
     {:else if searchType === 'videos' && videoResults.length > 0}
-      <div class="results-count">{videoResults.length} videos found</div>
+      <div class="results-header">
+        <span class="results-count">{videoResults.length} videos found</span>
+        {#if selectedMood || searchQuery}
+          <button class="clear-btn" onclick={clearResults}>Clear</button>
+        {/if}
+      </div>
       <div class="video-grid">
         {#each videoResults as video}
           <div class="video-card">
@@ -501,6 +492,23 @@
           </div>
         {/each}
       </div>
+      <!-- Load More -->
+      {#if hasMore}
+        <div class="load-more">
+          <button
+            class="load-more-btn"
+            onclick={loadMore}
+            disabled={loadingMore}
+          >
+            {#if loadingMore}
+              <span class="loading-spinner small"></span>
+              Loading more...
+            {:else}
+              Load More Videos
+            {/if}
+          </button>
+        </div>
+      {/if}
     {:else if searchType === 'channels' && channelResults.length > 0}
       <div class="results-count">{channelResults.length} channels found</div>
       <div class="channel-grid">
@@ -551,16 +559,16 @@
           </div>
         {/each}
       </div>
-    {:else if !searching && (videoResults.length === 0 && channelResults.length === 0) && searchQuery}
+    {:else if !searching && (videoResults.length === 0 && channelResults.length === 0) && (searchQuery || selectedMood)}
       <div class="no-results">
-        <p>No results found for "{searchQuery}"</p>
-        <p class="hint">Try different keywords or select more platforms</p>
+        <p>No results found</p>
+        <p class="hint">Try different keywords, select a different mood, or add more platforms</p>
       </div>
     {:else}
       <div class="empty-state">
         <div class="empty-icon">🌐</div>
-        <h2>Search Across Platforms</h2>
-        <p>Search for videos or channels across YouTube, Rumble, Odysee, BitChute, and Dailymotion simultaneously.</p>
+        <h2>Discover New Content</h2>
+        <p>Select a mood above to find videos, or enter a search query to explore across platforms.</p>
         <p class="hint">Select platforms above and enter your search query</p>
       </div>
     {/if}
@@ -614,29 +622,28 @@
   }
 
   .mood-buttons {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: var(--spacing-md);
-    margin-bottom: var(--spacing-lg);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
   }
 
   .mood-btn {
     display: flex;
-    flex-direction: column;
     align-items: center;
     gap: var(--spacing-xs);
-    padding: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
     background: var(--color-bg-secondary);
     border: 2px solid var(--color-border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-full);
     cursor: pointer;
     transition: all 0.2s ease;
-    text-align: center;
+    white-space: nowrap;
   }
 
   .mood-btn:hover {
     border-color: var(--color-primary);
-    transform: translateY(-2px);
+    background: var(--color-bg);
   }
 
   .mood-btn.selected {
@@ -646,12 +653,12 @@
   }
 
   .mood-icon {
-    font-size: 2rem;
+    font-size: 1.25rem;
   }
 
   .mood-label {
-    font-weight: 600;
-    font-size: 0.95rem;
+    font-weight: 500;
+    font-size: 0.9rem;
   }
 
   .mood-desc {
@@ -674,6 +681,67 @@
     color: var(--color-error);
     border-radius: var(--radius-md);
     font-size: 0.9rem;
+  }
+
+  .mood-search-bar {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+  }
+
+  .mood-search-input {
+    flex: 1;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: 0.9rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  .mood-search-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+
+  .mood-search-btn {
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .mood-search-btn:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .mood-search-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .mood-subscribe-btn {
+    margin-top: var(--spacing-xs);
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .mood-subscribe-btn:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  .mood-subscribe-btn:disabled {
+    opacity: 0.5;
   }
 
   .mood-results-header {
@@ -1286,34 +1354,125 @@
     opacity: 0.7;
   }
 
+  /* Search Controls */
+  .search-controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-md);
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-border);
+  }
+
+  /* Results Header */
+  .results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-md);
+  }
+
+  .results-count {
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+  }
+
+  .clear-btn {
+    padding: var(--spacing-xs) var(--spacing-md);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .clear-btn:hover {
+    background: var(--color-bg);
+    border-color: var(--color-text-secondary);
+    color: var(--color-text);
+  }
+
+  /* Load More */
+  .load-more {
+    display: flex;
+    justify-content: center;
+    padding: var(--spacing-xl) 0;
+  }
+
+  .load-more-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md) var(--spacing-xl);
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .load-more-btn:hover:not(:disabled) {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+
+  .load-more-btn:disabled {
+    opacity: 0.7;
+    cursor: wait;
+  }
+
+  .loading-spinner.small {
+    width: 20px;
+    height: 20px;
+    border-width: 2px;
+  }
+
   /* Mobile */
   @media (max-width: 768px) {
     .mood-buttons {
-      grid-template-columns: repeat(2, 1fr);
+      overflow-x: auto;
+      flex-wrap: nowrap;
+      padding-bottom: var(--spacing-sm);
+      -webkit-overflow-scrolling: touch;
     }
 
     .mood-btn {
+      flex-shrink: 0;
+    }
+
+    .search-controls {
       padding: var(--spacing-sm);
     }
 
-    .mood-icon {
-      font-size: 1.5rem;
+    .platform-toggles {
+      overflow-x: auto;
+      flex-wrap: nowrap;
+      padding-bottom: var(--spacing-sm);
+      -webkit-overflow-scrolling: touch;
     }
 
-    .mood-label {
-      font-size: 0.85rem;
-    }
-
-    .mood-desc {
-      display: none;
-    }
-
-    .mood-video-grid {
-      grid-template-columns: repeat(2, 1fr);
+    .platform-btn {
+      flex-shrink: 0;
     }
 
     .search-bar {
       flex-direction: column;
+    }
+
+    .search-type-tabs {
+      width: 100%;
+    }
+
+    .type-tab {
+      flex: 1;
+      justify-content: center;
     }
 
     .search-btn {
@@ -1322,6 +1481,17 @@
 
     .video-grid {
       grid-template-columns: 1fr;
+    }
+
+    .results-header {
+      flex-direction: column;
+      gap: var(--spacing-sm);
+      align-items: flex-start;
+    }
+
+    .load-more-btn {
+      width: 100%;
+      justify-content: center;
     }
 
     .channel-card {

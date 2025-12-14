@@ -4,11 +4,11 @@ from datetime import datetime
 from typing import Optional, Literal
 
 from fastapi import APIRouter, HTTPException, status, Query, BackgroundTasks
-from sqlalchemy import select, func, desc
+from sqlalchemy import select, func, desc, or_
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import DbSession
-from app.models import Channel, FeedItem
+from app.api.deps import DbSession, CurrentUserOrDefault
+from app.models import Channel, FeedItem, UserWatchState
 from app.schemas.feed import (
     FeedItemResponse,
     FeedItemWithChannel,
@@ -21,8 +21,17 @@ from app.schemas.feed import (
 router = APIRouter()
 
 
-def _feed_item_to_response(item: FeedItem, channel: Optional[Channel] = None) -> FeedItemWithChannel:
-    """Convert FeedItem model to response schema."""
+def _feed_item_to_response(
+    item: FeedItem,
+    channel: Optional[Channel] = None,
+    watch_state: Optional[UserWatchState] = None,
+) -> FeedItemWithChannel:
+    """Convert FeedItem model to response schema with per-user watch state."""
+    # Use user-specific watch state if provided, otherwise fall back to global (for backward compat)
+    is_watched = watch_state.is_watched if watch_state else item.is_watched
+    watched_at = watch_state.watched_at if watch_state else item.watched_at
+    watch_progress = watch_state.watch_progress_seconds if watch_state else item.watch_progress_seconds
+
     return FeedItemWithChannel(
         id=item.id,
         channel_id=item.channel_id,
@@ -36,9 +45,9 @@ def _feed_item_to_response(item: FeedItem, channel: Optional[Channel] = None) ->
         view_count=item.view_count,
         upload_date=item.upload_date,
         categories=item.categories,
-        is_watched=item.is_watched,
-        watched_at=item.watched_at,
-        watch_progress_seconds=item.watch_progress_seconds,
+        is_watched=is_watched,
+        watched_at=watched_at,
+        watch_progress_seconds=watch_progress,
         discovered_at=item.discovered_at,
         duration_formatted=item.duration_formatted,
         is_recent=item.is_recent,
@@ -84,6 +93,7 @@ def _apply_mode_preset(mode: str) -> dict:
 @router.get("", response_model=FeedResponse)
 async def get_feed(
     db: DbSession,
+    user: CurrentUserOrDefault,
     filter: Literal["all", "unwatched", "watched"] = Query("all", description="Filter by watch status"),
     platform: Optional[str] = Query(None, description="Filter by platform"),
     channel_ids: Optional[str] = Query(None, description="Comma-separated channel IDs"),
@@ -101,8 +111,9 @@ async def get_feed(
     Get the video feed with flexible sorting and filtering.
 
     Supports feed modes (catch_up, quick_watch, deep_dive, mood-based) and custom sorting.
+    Watch status is per-user.
     """
-    from sqlalchemy import or_
+    from sqlalchemy.orm import aliased
 
     # Apply mode presets (overrides some parameters)
     category_filter = None
@@ -121,19 +132,36 @@ async def get_feed(
     elif category:
         category_filter = [category]
 
-    # Build base query - only include items from active channels
+    # Create alias for UserWatchState to left-join per-user watch state
+    UserWatchStateAlias = aliased(UserWatchState)
+
+    # Build base query - only include items from channels the user is subscribed to
+    # Left join with user's watch state
     query = (
-        select(FeedItem)
+        select(FeedItem, UserWatchStateAlias)
         .join(Channel)
+        .outerjoin(
+            UserWatchStateAlias,
+            (UserWatchStateAlias.feed_item_id == FeedItem.id) &
+            (UserWatchStateAlias.user_id == user.id)
+        )
         .where(Channel.is_active == True)
+        .where(Channel.user_id == user.id)  # Only show videos from user's subscribed channels
         .options(selectinload(FeedItem.channel))
     )
 
-    # Apply watch status filter
+    # Apply watch status filter (using user's watch state)
     if filter == "unwatched":
-        query = query.where(FeedItem.is_watched == False)
+        # Unwatched = no watch state OR watch state with is_watched=False
+        query = query.where(
+            or_(
+                UserWatchStateAlias.id.is_(None),
+                UserWatchStateAlias.is_watched == False
+            )
+        )
     elif filter == "watched":
-        query = query.where(FeedItem.is_watched == True)
+        # Watched = has watch state with is_watched=True
+        query = query.where(UserWatchStateAlias.is_watched == True)
 
     # Apply platform filter
     if platform:
@@ -190,20 +218,28 @@ async def get_feed(
     query = query.offset(offset).limit(per_page)
 
     result = await db.execute(query)
-    items = list(result.scalars().all())
+    rows = list(result.all())
+
+    # Convert to response with per-user watch state
+    items_with_state = []
+    for row in rows:
+        item = row[0]  # FeedItem
+        watch_state = row[1]  # UserWatchState or None
+        items_with_state.append(_feed_item_to_response(item, watch_state=watch_state))
 
     return FeedResponse(
-        items=[_feed_item_to_response(item) for item in items],
+        items=items_with_state,
         total=total,
         page=page,
         per_page=per_page,
-        has_more=(offset + len(items)) < total,
+        has_more=(offset + len(rows)) < total,
     )
 
 
 @router.get("/by-channel", response_model=ChannelGroupedFeedResponse)
 async def get_feed_by_channel(
     db: DbSession,
+    user: CurrentUserOrDefault,
     filter: Literal["all", "unwatched", "watched"] = Query("all"),
     platform: Optional[str] = Query(None),
     max_per_channel: int = Query(5, ge=1, le=20, description="Max videos per channel"),
@@ -211,10 +247,18 @@ async def get_feed_by_channel(
     """
     Get the video feed grouped by channel.
 
-    Shows recent videos from each subscribed channel.
+    Shows recent videos from each subscribed channel with per-user watch state.
     """
-    # Get all active channels
-    channel_query = select(Channel).where(Channel.is_active == True)
+    from sqlalchemy.orm import aliased
+
+    UserWatchStateAlias = aliased(UserWatchState)
+
+    # Get all active channels the user is subscribed to
+    channel_query = (
+        select(Channel)
+        .where(Channel.is_active == True)
+        .where(Channel.user_id == user.id)  # Only show user's subscribed channels
+    )
     if platform:
         channel_query = channel_query.where(Channel.platform == platform)
     channel_query = channel_query.order_by(Channel.name)
@@ -226,31 +270,56 @@ async def get_feed_by_channel(
     total_items = 0
 
     for channel in channels:
-        # Get recent videos for this channel
+        # Get recent videos for this channel with user's watch state
         item_query = (
-            select(FeedItem)
+            select(FeedItem, UserWatchStateAlias)
+            .outerjoin(
+                UserWatchStateAlias,
+                (UserWatchStateAlias.feed_item_id == FeedItem.id) &
+                (UserWatchStateAlias.user_id == user.id)
+            )
             .where(FeedItem.channel_id == channel.id)
             .order_by(desc(FeedItem.upload_date))
-            .limit(max_per_channel)
         )
 
         if filter == "unwatched":
-            item_query = item_query.where(FeedItem.is_watched == False)
+            item_query = item_query.where(
+                or_(
+                    UserWatchStateAlias.id.is_(None),
+                    UserWatchStateAlias.is_watched == False
+                )
+            )
         elif filter == "watched":
-            item_query = item_query.where(FeedItem.is_watched == True)
+            item_query = item_query.where(UserWatchStateAlias.is_watched == True)
+
+        item_query = item_query.limit(max_per_channel)
 
         item_result = await db.execute(item_query)
-        items = list(item_result.scalars().all())
+        rows = list(item_result.all())
 
-        if not items:
+        if not rows:
             continue
 
-        # Count totals for this channel
+        # Count totals for this channel (per user)
         count_query = select(func.count()).where(FeedItem.channel_id == channel.id)
-        unwatched_query = select(func.count()).where(
-            FeedItem.channel_id == channel.id,
-            FeedItem.is_watched == False,
+
+        # Unwatched = items without watch state OR with is_watched=False for this user
+        unwatched_subquery = (
+            select(FeedItem.id)
+            .outerjoin(
+                UserWatchState,
+                (UserWatchState.feed_item_id == FeedItem.id) &
+                (UserWatchState.user_id == user.id)
+            )
+            .where(FeedItem.channel_id == channel.id)
+            .where(
+                or_(
+                    UserWatchState.id.is_(None),
+                    UserWatchState.is_watched == False
+                )
+            )
         )
+        unwatched_query = select(func.count()).select_from(unwatched_subquery.subquery())
 
         total_result = await db.execute(count_query)
         unwatched_result = await db.execute(unwatched_query)
@@ -258,12 +327,16 @@ async def get_feed_by_channel(
         channel_total = total_result.scalar() or 0
         unwatched_count = unwatched_result.scalar() or 0
 
-        grouped_feeds.append(ChannelGroupedFeed(
-            channel_id=channel.id,
-            channel_name=channel.name,
-            channel_avatar_url=channel.avatar_url,
-            platform=channel.platform,
-            items=[FeedItemResponse(
+        # Build response items with per-user watch state
+        response_items = []
+        for row in rows:
+            item = row[0]
+            watch_state = row[1]
+            is_watched = watch_state.is_watched if watch_state else False
+            watched_at = watch_state.watched_at if watch_state else None
+            watch_progress = watch_state.watch_progress_seconds if watch_state else None
+
+            response_items.append(FeedItemResponse(
                 id=item.id,
                 channel_id=item.channel_id,
                 platform=item.platform,
@@ -276,13 +349,20 @@ async def get_feed_by_channel(
                 view_count=item.view_count,
                 upload_date=item.upload_date,
                 categories=item.categories,
-                is_watched=item.is_watched,
-                watched_at=item.watched_at,
-                watch_progress_seconds=item.watch_progress_seconds,
+                is_watched=is_watched,
+                watched_at=watched_at,
+                watch_progress_seconds=watch_progress,
                 discovered_at=item.discovered_at,
                 duration_formatted=item.duration_formatted,
                 is_recent=item.is_recent,
-            ) for item in items],
+            ))
+
+        grouped_feeds.append(ChannelGroupedFeed(
+            channel_id=channel.id,
+            channel_name=channel.name,
+            channel_avatar_url=channel.avatar_url,
+            platform=channel.platform,
+            items=response_items,
             total_items=channel_total,
             unwatched_count=unwatched_count,
         ))
@@ -297,27 +377,40 @@ async def get_feed_by_channel(
 
 
 @router.get("/items/{item_id}", response_model=FeedItemWithChannel)
-async def get_feed_item(item_id: int, db: DbSession) -> FeedItemWithChannel:
-    """Get a specific feed item."""
+async def get_feed_item(item_id: int, db: DbSession, user: CurrentUserOrDefault) -> FeedItemWithChannel:
+    """Get a specific feed item with per-user watch state."""
+    from sqlalchemy.orm import aliased
+
+    UserWatchStateAlias = aliased(UserWatchState)
+
     result = await db.execute(
-        select(FeedItem)
+        select(FeedItem, UserWatchStateAlias)
+        .outerjoin(
+            UserWatchStateAlias,
+            (UserWatchStateAlias.feed_item_id == FeedItem.id) &
+            (UserWatchStateAlias.user_id == user.id)
+        )
         .options(selectinload(FeedItem.channel))
         .where(FeedItem.id == item_id)
     )
-    item = result.scalar_one_or_none()
+    row = result.one_or_none()
 
-    if not item:
+    if not row:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Feed item with id {item_id} not found",
         )
 
-    return _feed_item_to_response(item)
+    item = row[0]
+    watch_state = row[1]
+
+    return _feed_item_to_response(item, watch_state=watch_state)
 
 
 @router.put("/items/{item_id}/watched", response_model=FeedItemWithChannel)
-async def mark_watched(item_id: int, db: DbSession) -> FeedItemWithChannel:
-    """Mark a feed item as watched."""
+async def mark_watched(item_id: int, db: DbSession, user: CurrentUserOrDefault) -> FeedItemWithChannel:
+    """Mark a feed item as watched for the current user."""
+    # First verify the feed item exists
     result = await db.execute(
         select(FeedItem)
         .options(selectinload(FeedItem.channel))
@@ -331,16 +424,31 @@ async def mark_watched(item_id: int, db: DbSession) -> FeedItemWithChannel:
             detail=f"Feed item with id {item_id} not found",
         )
 
-    item.mark_watched()
+    # Get or create user's watch state
+    watch_state_result = await db.execute(
+        select(UserWatchState).where(
+            UserWatchState.user_id == user.id,
+            UserWatchState.feed_item_id == item_id,
+        )
+    )
+    watch_state = watch_state_result.scalar_one_or_none()
+
+    if not watch_state:
+        watch_state = UserWatchState(user_id=user.id, feed_item_id=item_id)
+        db.add(watch_state)
+
+    watch_state.mark_watched()
     await db.commit()
+    await db.refresh(watch_state)
     await db.refresh(item)
 
-    return _feed_item_to_response(item)
+    return _feed_item_to_response(item, watch_state=watch_state)
 
 
 @router.put("/items/{item_id}/unwatched", response_model=FeedItemWithChannel)
-async def mark_unwatched(item_id: int, db: DbSession) -> FeedItemWithChannel:
-    """Mark a feed item as unwatched."""
+async def mark_unwatched(item_id: int, db: DbSession, user: CurrentUserOrDefault) -> FeedItemWithChannel:
+    """Mark a feed item as unwatched for the current user."""
+    # First verify the feed item exists
     result = await db.execute(
         select(FeedItem)
         .options(selectinload(FeedItem.channel))
@@ -354,11 +462,25 @@ async def mark_unwatched(item_id: int, db: DbSession) -> FeedItemWithChannel:
             detail=f"Feed item with id {item_id} not found",
         )
 
-    item.mark_unwatched()
+    # Get or create user's watch state
+    watch_state_result = await db.execute(
+        select(UserWatchState).where(
+            UserWatchState.user_id == user.id,
+            UserWatchState.feed_item_id == item_id,
+        )
+    )
+    watch_state = watch_state_result.scalar_one_or_none()
+
+    if not watch_state:
+        watch_state = UserWatchState(user_id=user.id, feed_item_id=item_id)
+        db.add(watch_state)
+
+    watch_state.mark_unwatched()
     await db.commit()
+    await db.refresh(watch_state)
     await db.refresh(item)
 
-    return _feed_item_to_response(item)
+    return _feed_item_to_response(item, watch_state=watch_state)
 
 
 @router.put("/items/{item_id}/progress", response_model=FeedItemWithChannel)
@@ -366,8 +488,10 @@ async def update_watch_progress(
     item_id: int,
     progress_seconds: int,
     db: DbSession,
+    user: CurrentUserOrDefault,
 ) -> FeedItemWithChannel:
-    """Update watch progress for a feed item."""
+    """Update watch progress for a feed item for the current user."""
+    # First verify the feed item exists
     result = await db.execute(
         select(FeedItem)
         .options(selectinload(FeedItem.channel))
@@ -381,11 +505,25 @@ async def update_watch_progress(
             detail=f"Feed item with id {item_id} not found",
         )
 
-    item.watch_progress_seconds = progress_seconds
+    # Get or create user's watch state
+    watch_state_result = await db.execute(
+        select(UserWatchState).where(
+            UserWatchState.user_id == user.id,
+            UserWatchState.feed_item_id == item_id,
+        )
+    )
+    watch_state = watch_state_result.scalar_one_or_none()
+
+    if not watch_state:
+        watch_state = UserWatchState(user_id=user.id, feed_item_id=item_id)
+        db.add(watch_state)
+
+    watch_state.update_progress(progress_seconds)
     await db.commit()
+    await db.refresh(watch_state)
     await db.refresh(item)
 
-    return _feed_item_to_response(item)
+    return _feed_item_to_response(item, watch_state=watch_state)
 
 
 async def _run_sync_in_background(platform: Optional[str] = None):
@@ -487,27 +625,45 @@ async def _run_metadata_fix_in_background(limit: int):
 
 
 @router.get("/stats", response_model=dict)
-async def get_feed_stats(db: DbSession) -> dict:
-    """Get feed statistics."""
-    # Total videos
-    total_result = await db.execute(select(func.count(FeedItem.id)))
+async def get_feed_stats(db: DbSession, user: CurrentUserOrDefault) -> dict:
+    """Get feed statistics for the current user's subscribed channels."""
+    # Total videos from user's subscribed channels
+    total_result = await db.execute(
+        select(func.count(FeedItem.id))
+        .join(Channel)
+        .where(Channel.user_id == user.id)
+        .where(Channel.is_active == True)
+    )
     total_videos = total_result.scalar() or 0
 
-    # Unwatched videos
-    unwatched_result = await db.execute(
-        select(func.count(FeedItem.id)).where(FeedItem.is_watched == False)
+    # Watched videos count for this user (via UserWatchState) from their subscribed channels
+    watched_result = await db.execute(
+        select(func.count(UserWatchState.id))
+        .join(FeedItem, UserWatchState.feed_item_id == FeedItem.id)
+        .join(Channel, FeedItem.channel_id == Channel.id)
+        .where(
+            UserWatchState.user_id == user.id,
+            UserWatchState.is_watched == True,
+            Channel.user_id == user.id
+        )
     )
-    unwatched_videos = unwatched_result.scalar() or 0
+    watched_videos = watched_result.scalar() or 0
+    unwatched_videos = total_videos - watched_videos
 
-    # Total channels
+    # Total channels for this user
     channel_result = await db.execute(
-        select(func.count(Channel.id)).where(Channel.is_active == True)
+        select(func.count(Channel.id))
+        .where(Channel.is_active == True)
+        .where(Channel.user_id == user.id)
     )
     total_channels = channel_result.scalar() or 0
 
-    # Videos by platform
+    # Videos by platform from user's subscribed channels
     platform_result = await db.execute(
         select(FeedItem.platform, func.count(FeedItem.id))
+        .join(Channel)
+        .where(Channel.user_id == user.id)
+        .where(Channel.is_active == True)
         .group_by(FeedItem.platform)
     )
     by_platform = dict(platform_result.all())
@@ -515,7 +671,7 @@ async def get_feed_stats(db: DbSession) -> dict:
     return {
         "total_videos": total_videos,
         "unwatched_videos": unwatched_videos,
-        "watched_videos": total_videos - unwatched_videos,
+        "watched_videos": watched_videos,
         "total_channels": total_channels,
         "by_platform": by_platform,
     }
@@ -524,38 +680,41 @@ async def get_feed_stats(db: DbSession) -> dict:
 @router.get("/history", response_model=FeedResponse)
 async def get_watch_history(
     db: DbSession,
+    user: CurrentUserOrDefault,
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=50, ge=1, le=200),
     include_completed: bool = Query(default=True, description="Include fully watched videos"),
 ) -> FeedResponse:
     """
-    Get watch history - videos that have been played or have progress.
+    Get watch history for the current user - videos that have been played or have progress.
 
     Returns videos sorted by most recently watched/played first.
     """
-    from sqlalchemy import or_
-
-    # Build query for videos with any watch activity
+    # Build query for videos with any watch activity for this user
     query = (
-        select(FeedItem)
+        select(FeedItem, UserWatchState)
+        .join(
+            UserWatchState,
+            (UserWatchState.feed_item_id == FeedItem.id) &
+            (UserWatchState.user_id == user.id)
+        )
         .options(selectinload(FeedItem.channel))
         .where(
             or_(
-                FeedItem.watch_progress_seconds > 0,
-                FeedItem.is_watched == True,
-                FeedItem.watched_at.isnot(None),
+                UserWatchState.watch_progress_seconds > 0,
+                UserWatchState.is_watched == True,
+                UserWatchState.watched_at.isnot(None),
             )
         )
     )
 
     if not include_completed:
         # Only show in-progress videos (not fully watched)
-        query = query.where(FeedItem.is_watched == False)
+        query = query.where(UserWatchState.is_watched == False)
 
-    # Sort by watched_at if available, otherwise by when progress was likely made
-    # Use coalesce to handle null watched_at
+    # Sort by watched_at if available, otherwise by updated_at
     query = query.order_by(
-        desc(func.coalesce(FeedItem.watched_at, FeedItem.discovered_at))
+        desc(func.coalesce(UserWatchState.watched_at, UserWatchState.updated_at))
     )
 
     # Get total count
@@ -568,12 +727,19 @@ async def get_watch_history(
     query = query.offset(offset).limit(per_page)
 
     result = await db.execute(query)
-    items = list(result.scalars().all())
+    rows = list(result.all())
 
     has_more = (page * per_page) < total
 
+    # Convert to response with per-user watch state
+    items_with_state = []
+    for row in rows:
+        item = row[0]
+        watch_state = row[1]
+        items_with_state.append(_feed_item_to_response(item, watch_state=watch_state))
+
     return FeedResponse(
-        items=[_feed_item_to_response(item) for item in items],
+        items=items_with_state,
         total=total,
         page=page,
         per_page=per_page,

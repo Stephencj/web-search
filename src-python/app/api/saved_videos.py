@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, status, Query
 
-from app.api.deps import DbSession
+from app.api.deps import DbSession, CurrentUserOrDefault
 from app.models import SavedVideo
 from app.schemas.saved_video import (
     SavedVideoCreate,
@@ -48,12 +48,13 @@ def _video_to_response(video: SavedVideo) -> SavedVideoResponse:
 @router.get("", response_model=SavedVideoListResponse)
 async def list_saved_videos(
     db: DbSession,
+    user: CurrentUserOrDefault,
     platform: Optional[str] = Query(None, description="Filter by platform"),
     is_watched: Optional[bool] = Query(None, description="Filter by watched status"),
     limit: int = Query(50, ge=1, le=100, description="Maximum results to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
 ) -> SavedVideoListResponse:
-    """List all saved videos with optional filtering."""
+    """List all saved videos with optional filtering for the current user."""
     service = get_saved_video_service()
     videos, total = await service.list_saved_videos(
         db,
@@ -61,6 +62,7 @@ async def list_saved_videos(
         is_watched=is_watched,
         limit=limit,
         offset=offset,
+        user_id=user.id,
     )
 
     return SavedVideoListResponse(
@@ -70,17 +72,17 @@ async def list_saved_videos(
 
 
 @router.get("/stats", response_model=SavedVideoStats)
-async def get_stats(db: DbSession) -> SavedVideoStats:
-    """Get statistics for saved videos."""
+async def get_stats(db: DbSession, user: CurrentUserOrDefault) -> SavedVideoStats:
+    """Get statistics for saved videos for the current user."""
     service = get_saved_video_service()
-    stats = await service.get_stats(db)
+    stats = await service.get_stats(db, user_id=user.id)
     return SavedVideoStats(**stats)
 
 
 @router.post("", response_model=SavedVideoResponse, status_code=status.HTTP_201_CREATED)
-async def save_video(data: SavedVideoCreate, db: DbSession) -> SavedVideoResponse:
+async def save_video(data: SavedVideoCreate, db: DbSession, user: CurrentUserOrDefault) -> SavedVideoResponse:
     """
-    Save a video with full metadata.
+    Save a video with full metadata for the current user.
 
     This endpoint accepts complete video metadata. For saving by URL only,
     use the /from-url endpoint.
@@ -102,22 +104,23 @@ async def save_video(data: SavedVideoCreate, db: DbSession) -> SavedVideoRespons
         channel_id=data.channel_id,
         channel_url=data.channel_url,
         notes=data.notes,
+        user_id=user.id,
     )
 
     return _video_to_response(video)
 
 
 @router.post("/from-url", response_model=SavedVideoResponse, status_code=status.HTTP_201_CREATED)
-async def save_video_from_url(data: SavedVideoCreateFromUrl, db: DbSession) -> SavedVideoResponse:
+async def save_video_from_url(data: SavedVideoCreateFromUrl, db: DbSession, user: CurrentUserOrDefault) -> SavedVideoResponse:
     """
-    Save a video by URL, auto-fetching metadata.
+    Save a video by URL, auto-fetching metadata for the current user.
 
     The platform is detected from the URL and metadata is fetched automatically.
     """
     service = get_saved_video_service()
 
     try:
-        video = await service.save_from_url(db, data.url, notes=data.notes)
+        video = await service.save_from_url(db, data.url, notes=data.notes, user_id=user.id)
         return _video_to_response(video)
     except ValueError as e:
         raise HTTPException(
@@ -129,20 +132,21 @@ async def save_video_from_url(data: SavedVideoCreateFromUrl, db: DbSession) -> S
 @router.get("/check")
 async def check_if_saved(
     db: DbSession,
+    user: CurrentUserOrDefault,
     platform: str = Query(..., description="Platform identifier"),
     video_id: str = Query(..., description="Platform-specific video ID"),
 ) -> dict:
-    """Check if a video is already saved."""
+    """Check if a video is already saved for the current user."""
     service = get_saved_video_service()
-    is_saved = await service.check_if_saved(db, platform, video_id)
+    is_saved = await service.check_if_saved(db, platform, video_id, user_id=user.id)
     return {"is_saved": is_saved, "platform": platform, "video_id": video_id}
 
 
 @router.get("/{video_id}", response_model=SavedVideoResponse)
-async def get_saved_video(video_id: int, db: DbSession) -> SavedVideoResponse:
-    """Get a saved video by ID."""
+async def get_saved_video(video_id: int, db: DbSession, user: CurrentUserOrDefault) -> SavedVideoResponse:
+    """Get a saved video by ID for the current user."""
     service = get_saved_video_service()
-    video = await service.get_saved_video(db, video_id)
+    video = await service.get_saved_video(db, video_id, user_id=user.id)
 
     if not video:
         raise HTTPException(
@@ -158,12 +162,13 @@ async def update_saved_video(
     video_id: int,
     data: SavedVideoUpdate,
     db: DbSession,
+    user: CurrentUserOrDefault,
 ) -> SavedVideoResponse:
-    """Update a saved video."""
+    """Update a saved video for the current user."""
     service = get_saved_video_service()
 
     update_data = data.model_dump(exclude_unset=True)
-    video = await service.update_saved_video(db, video_id, **update_data)
+    video = await service.update_saved_video(db, video_id, user_id=user.id, **update_data)
 
     if not video:
         raise HTTPException(
@@ -178,11 +183,12 @@ async def update_saved_video(
 async def mark_watched(
     video_id: int,
     db: DbSession,
+    user: CurrentUserOrDefault,
     progress_seconds: Optional[int] = None,
 ) -> SavedVideoResponse:
-    """Mark a saved video as watched."""
+    """Mark a saved video as watched for the current user."""
     service = get_saved_video_service()
-    video = await service.mark_watched(db, video_id, progress_seconds)
+    video = await service.mark_watched(db, video_id, progress_seconds, user_id=user.id)
 
     if not video:
         raise HTTPException(
@@ -194,10 +200,10 @@ async def mark_watched(
 
 
 @router.put("/{video_id}/unwatched", response_model=SavedVideoResponse)
-async def mark_unwatched(video_id: int, db: DbSession) -> SavedVideoResponse:
-    """Mark a saved video as unwatched."""
+async def mark_unwatched(video_id: int, db: DbSession, user: CurrentUserOrDefault) -> SavedVideoResponse:
+    """Mark a saved video as unwatched for the current user."""
     service = get_saved_video_service()
-    video = await service.mark_unwatched(db, video_id)
+    video = await service.mark_unwatched(db, video_id, user_id=user.id)
 
     if not video:
         raise HTTPException(
@@ -211,17 +217,18 @@ async def mark_unwatched(video_id: int, db: DbSession) -> SavedVideoResponse:
 @router.put("/{video_id}/progress", response_model=SavedVideoResponse)
 async def update_watch_progress(
     video_id: int,
+    db: DbSession,
+    user: CurrentUserOrDefault,
     progress_seconds: int = Query(..., description="Current playback position in seconds"),
-    db: DbSession = None,
 ) -> SavedVideoResponse:
     """
-    Update watch progress for a saved video.
+    Update watch progress for a saved video for the current user.
 
     Call this periodically during playback to save the current position.
     Does not mark the video as watched - use the /watched endpoint for that.
     """
     service = get_saved_video_service()
-    video = await service.update_progress(db, video_id, progress_seconds)
+    video = await service.update_progress(db, video_id, progress_seconds, user_id=user.id)
 
     if not video:
         raise HTTPException(
@@ -233,10 +240,10 @@ async def update_watch_progress(
 
 
 @router.delete("/{video_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_saved_video(video_id: int, db: DbSession) -> None:
-    """Delete a saved video."""
+async def delete_saved_video(video_id: int, db: DbSession, user: CurrentUserOrDefault) -> None:
+    """Delete a saved video for the current user."""
     service = get_saved_video_service()
-    deleted = await service.delete_saved_video(db, video_id)
+    deleted = await service.delete_saved_video(db, video_id, user_id=user.id)
 
     if not deleted:
         raise HTTPException(

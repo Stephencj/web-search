@@ -10,6 +10,7 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.channel import Channel
+    from app.models.user_watch_state import UserWatchState
 
 
 class FeedItem(Base):
@@ -58,6 +59,9 @@ class FeedItem(Base):
 
     # Relationships
     channel: Mapped["Channel"] = relationship("Channel", back_populates="feed_items")
+    watch_states: Mapped[list["UserWatchState"]] = relationship(
+        "UserWatchState", back_populates="feed_item", cascade="all, delete-orphan"
+    )
 
     # Unique constraint: one video per platform
     __table_args__ = (

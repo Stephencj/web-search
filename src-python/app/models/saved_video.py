@@ -1,12 +1,15 @@
 """SavedVideo model - represents a bookmarked video from any platform."""
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class SavedVideo(Base):
@@ -19,6 +22,11 @@ class SavedVideo(Base):
     __tablename__ = "saved_videos"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    # User ownership (nullable for backward compatibility during migration)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
 
     # Video identification
     platform: Mapped[str] = mapped_column(
@@ -58,9 +66,12 @@ class SavedVideo(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    # Unique constraint: one saved entry per video per platform
+    # Relationships
+    user: Mapped[Optional["User"]] = relationship("User", backref="saved_videos")
+
+    # Unique constraint: one saved entry per video per platform per user
     __table_args__ = (
-        UniqueConstraint('platform', 'video_id', name='uix_saved_platform_video'),
+        UniqueConstraint('user_id', 'platform', 'video_id', name='uix_user_saved_platform_video'),
     )
 
     @property

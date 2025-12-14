@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from loguru import logger
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import SavedVideo
@@ -30,14 +30,15 @@ class SavedVideoService:
         channel_id: Optional[str] = None,
         channel_url: Optional[str] = None,
         notes: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> SavedVideo:
         """
         Save a video to bookmarks.
 
-        If the video already exists, returns the existing one.
+        If the video already exists for this user, returns the existing one.
         """
-        # Check if video already saved
-        existing = await self.get_by_platform_video_id(db, platform, video_id)
+        # Check if video already saved for this user
+        existing = await self.get_by_platform_video_id(db, platform, video_id, user_id=user_id)
         if existing:
             logger.info(f"Video already saved: {existing.title}")
             return existing
@@ -57,13 +58,14 @@ class SavedVideoService:
             channel_id=channel_id,
             channel_url=channel_url,
             notes=notes,
+            user_id=user_id,
         )
 
         db.add(saved_video)
         await db.commit()
         await db.refresh(saved_video)
 
-        logger.info(f"Saved video: {saved_video.title} ({platform})")
+        logger.info(f"Saved video: {saved_video.title} ({platform}) for user {user_id}")
         return saved_video
 
     async def save_from_url(
@@ -71,6 +73,7 @@ class SavedVideoService:
         db: AsyncSession,
         url: str,
         notes: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> SavedVideo:
         """
         Save a video by URL, auto-fetching metadata.
@@ -120,6 +123,7 @@ class SavedVideoService:
             channel_id=video_info.channel_id,
             channel_url=video_info.channel_url,
             notes=notes,
+            user_id=user_id,
         )
 
     def _matches_platform_url(self, url: str, platform_id: str) -> bool:
@@ -138,11 +142,15 @@ class SavedVideoService:
         self,
         db: AsyncSession,
         video_id: int,
+        user_id: Optional[int] = None,
     ) -> Optional[SavedVideo]:
-        """Get a saved video by ID."""
-        result = await db.execute(
-            select(SavedVideo).where(SavedVideo.id == video_id)
-        )
+        """Get a saved video by ID, filtered by user."""
+        query = select(SavedVideo).where(SavedVideo.id == video_id)
+        if user_id is not None:
+            query = query.where(
+                or_(SavedVideo.user_id == user_id, SavedVideo.user_id.is_(None))
+            )
+        result = await db.execute(query)
         return result.scalar_one_or_none()
 
     async def get_by_platform_video_id(
@@ -150,14 +158,18 @@ class SavedVideoService:
         db: AsyncSession,
         platform: str,
         video_id: str,
+        user_id: Optional[int] = None,
     ) -> Optional[SavedVideo]:
-        """Get a saved video by platform and video ID."""
-        result = await db.execute(
-            select(SavedVideo).where(
-                SavedVideo.platform == platform,
-                SavedVideo.video_id == video_id,
-            )
+        """Get a saved video by platform and video ID for a user."""
+        query = select(SavedVideo).where(
+            SavedVideo.platform == platform,
+            SavedVideo.video_id == video_id,
         )
+        if user_id is not None:
+            query = query.where(
+                or_(SavedVideo.user_id == user_id, SavedVideo.user_id.is_(None))
+            )
+        result = await db.execute(query)
         return result.scalar_one_or_none()
 
     async def list_saved_videos(
@@ -167,15 +179,25 @@ class SavedVideoService:
         is_watched: Optional[bool] = None,
         limit: int = 50,
         offset: int = 0,
+        user_id: Optional[int] = None,
     ) -> tuple[list[SavedVideo], int]:
         """
-        List saved videos with filtering.
+        List saved videos with filtering for a specific user.
 
         Returns:
             Tuple of (videos, total_count)
         """
         query = select(SavedVideo).order_by(SavedVideo.saved_at.desc())
         count_query = select(func.count()).select_from(SavedVideo)
+
+        # Filter by user (includes legacy null user_id records)
+        if user_id is not None:
+            query = query.where(
+                or_(SavedVideo.user_id == user_id, SavedVideo.user_id.is_(None))
+            )
+            count_query = count_query.where(
+                or_(SavedVideo.user_id == user_id, SavedVideo.user_id.is_(None))
+            )
 
         if platform:
             query = query.where(SavedVideo.platform == platform)
@@ -200,10 +222,11 @@ class SavedVideoService:
         self,
         db: AsyncSession,
         video_id: int,
+        user_id: Optional[int] = None,
         **kwargs,
     ) -> Optional[SavedVideo]:
         """Update a saved video."""
-        video = await self.get_saved_video(db, video_id)
+        video = await self.get_saved_video(db, video_id, user_id=user_id)
         if not video:
             return None
 
@@ -220,9 +243,10 @@ class SavedVideoService:
         db: AsyncSession,
         video_id: int,
         progress_seconds: Optional[int] = None,
+        user_id: Optional[int] = None,
     ) -> Optional[SavedVideo]:
         """Mark a saved video as watched."""
-        video = await self.get_saved_video(db, video_id)
+        video = await self.get_saved_video(db, video_id, user_id=user_id)
         if not video:
             return None
 
@@ -238,9 +262,10 @@ class SavedVideoService:
         self,
         db: AsyncSession,
         video_id: int,
+        user_id: Optional[int] = None,
     ) -> Optional[SavedVideo]:
         """Mark a saved video as unwatched."""
-        video = await self.get_saved_video(db, video_id)
+        video = await self.get_saved_video(db, video_id, user_id=user_id)
         if not video:
             return None
 
@@ -254,9 +279,10 @@ class SavedVideoService:
         db: AsyncSession,
         video_id: int,
         progress_seconds: int,
+        user_id: Optional[int] = None,
     ) -> Optional[SavedVideo]:
         """Update watch progress without marking as watched."""
-        video = await self.get_saved_video(db, video_id)
+        video = await self.get_saved_video(db, video_id, user_id=user_id)
         if not video:
             return None
 
@@ -269,9 +295,10 @@ class SavedVideoService:
         self,
         db: AsyncSession,
         video_id: int,
+        user_id: Optional[int] = None,
     ) -> bool:
         """Delete a saved video."""
-        video = await self.get_saved_video(db, video_id)
+        video = await self.get_saved_video(db, video_id, user_id=user_id)
         if not video:
             return False
 
@@ -283,25 +310,33 @@ class SavedVideoService:
     async def get_stats(
         self,
         db: AsyncSession,
+        user_id: Optional[int] = None,
     ) -> dict:
-        """Get statistics for saved videos."""
+        """Get statistics for saved videos for a specific user."""
+        base_filter = or_(SavedVideo.user_id == user_id, SavedVideo.user_id.is_(None)) if user_id else True
+
         # Total count
         total_result = await db.execute(
-            select(func.count()).select_from(SavedVideo)
+            select(func.count()).select_from(SavedVideo).where(base_filter)
         )
         total = total_result.scalar() or 0
 
         # Watched count
         watched_result = await db.execute(
-            select(func.count()).select_from(SavedVideo).where(SavedVideo.is_watched == True)
+            select(func.count()).select_from(SavedVideo).where(
+                base_filter,
+                SavedVideo.is_watched == True
+            )
         )
         watched = watched_result.scalar() or 0
 
         # By platform
-        platform_result = await db.execute(
+        platform_query = (
             select(SavedVideo.platform, func.count())
+            .where(base_filter)
             .group_by(SavedVideo.platform)
         )
+        platform_result = await db.execute(platform_query)
         by_platform = {row[0]: row[1] for row in platform_result.all()}
 
         return {
@@ -316,9 +351,10 @@ class SavedVideoService:
         db: AsyncSession,
         platform: str,
         video_id: str,
+        user_id: Optional[int] = None,
     ) -> bool:
-        """Check if a video is already saved."""
-        existing = await self.get_by_platform_video_id(db, platform, video_id)
+        """Check if a video is already saved for a user."""
+        existing = await self.get_by_platform_video_id(db, platform, video_id, user_id=user_id)
         return existing is not None
 
 

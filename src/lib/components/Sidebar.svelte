@@ -1,5 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
+  import { auth } from '$lib/stores/auth.svelte';
 
   interface NavItem {
     href: string;
@@ -14,16 +16,16 @@
   }
   let { isOpen = $bindable(false), onClose = () => {} }: Props = $props();
 
+  let showUserMenu = $state(false);
+
   const navItems: NavItem[] = [
-    { href: '/', label: 'Search', icon: '🔍' },
     { href: '/discover', label: 'Discover', icon: '🌐' },
-    { href: '/saved', label: 'Saved', icon: '💾' },
     { href: '/feed', label: 'Feed', icon: '📺' },
-    { href: '/history', label: 'History', icon: '⏱️' },
     { href: '/subscriptions', label: 'Subscriptions', icon: '🔔' },
+    { href: '/saved', label: 'Saved', icon: '💾' },
     { href: '/collections', label: 'Collections', icon: '📁' },
-    { href: '/indexes', label: 'Indexes', icon: '📚' },
-    { href: '/crawl', label: 'Crawl Status', icon: '🔄' },
+    { href: '/history', label: 'History', icon: '⏱️' },
+    { href: '/crawler', label: 'Web Crawler', icon: '🕷️' },
     { href: '/settings', label: 'Settings', icon: '⚙️' },
   ];
 
@@ -37,6 +39,31 @@
     if (window.innerWidth <= 768) {
       onClose();
     }
+  }
+
+  function getInitials(name: string): string {
+    const parts = name.split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  }
+
+  async function handleLogout() {
+    showUserMenu = false;
+    await auth.logout();
+    goto('/login');
+  }
+
+  async function handleSwitchUser() {
+    showUserMenu = false;
+    // Logout current user so they can select a different profile
+    await auth.logout();
+    goto('/login');
+  }
+
+  function toggleUserMenu() {
+    showUserMenu = !showUserMenu;
   }
 </script>
 
@@ -64,10 +91,47 @@
   </nav>
 
   <div class="sidebar-footer">
-    <div class="status">
-      <span class="status-dot"></span>
-      <span class="status-text">Backend connected</span>
-    </div>
+    {#if auth.user}
+      <div class="user-section">
+        <button class="user-profile" onclick={toggleUserMenu}>
+          <div class="user-avatar" style="background-color: {auth.user.avatar_color}">
+            {getInitials(auth.user.display_name)}
+          </div>
+          <div class="user-info">
+            <span class="user-name">{auth.user.display_name}</span>
+            <span class="user-username">@{auth.user.username}</span>
+          </div>
+          <svg class="dropdown-arrow" class:open={showUserMenu} viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <path d="M7 10l5 5 5-5z"/>
+          </svg>
+        </button>
+
+        {#if showUserMenu}
+          <div class="user-menu">
+            <button class="user-menu-item" onclick={handleSwitchUser}>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <path d="M16.67 13.13C18.04 14.06 19 15.32 19 17v3h4v-3c0-2.18-3.57-3.47-6.33-3.87z"/>
+                <circle cx="9" cy="8" r="4"/>
+                <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4c-.47 0-.91.1-1.33.24a5.98 5.98 0 010 7.52c.42.14.86.24 1.33.24z"/>
+                <path d="M9 13c-2.67 0-8 1.34-8 4v3h16v-3c0-2.66-5.33-4-8-4z"/>
+              </svg>
+              Switch User
+            </button>
+            <button class="user-menu-item" onclick={handleLogout}>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+              </svg>
+              Logout
+            </button>
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <div class="status">
+        <span class="status-dot"></span>
+        <span class="status-text">Backend connected</span>
+      </div>
+    {/if}
   </div>
 </aside>
 
@@ -187,6 +251,113 @@
 
   .status-text {
     font-size: 0.75rem;
+    color: var(--color-text-secondary);
+  }
+
+  /* User Section */
+  .user-section {
+    position: relative;
+  }
+
+  .user-profile {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+    background: none;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.2s;
+  }
+
+  .user-profile:hover {
+    background: var(--color-bg);
+  }
+
+  .user-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: white;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+
+  .user-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .user-name {
+    display: block;
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .user-username {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dropdown-arrow {
+    color: var(--color-text-secondary);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+  }
+
+  .dropdown-arrow.open {
+    transform: rotate(180deg);
+  }
+
+  .user-menu {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    margin-bottom: var(--spacing-xs);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+  }
+
+  .user-menu-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: none;
+    border: none;
+    color: var(--color-text);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    text-align: left;
+  }
+
+  .user-menu-item:hover {
+    background: var(--color-bg);
+  }
+
+  .user-menu-item svg {
     color: var(--color-text-secondary);
   }
 
