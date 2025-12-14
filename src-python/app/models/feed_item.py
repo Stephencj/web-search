@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -41,6 +41,7 @@ class FeedItem(Base):
     duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     view_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     upload_date: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    categories: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)  # YouTube categories
 
     # Watch state
     is_watched: Mapped[bool] = mapped_column(Boolean, default=False, index=True)

@@ -3,19 +3,27 @@
    * VideoPlayer - Handles YouTube, Vimeo, and direct video playback
    */
   import type { MediaItem } from '$lib/stores/mediaViewer.svelte';
+  import { loadYouTubeAPI, createYouTubePlayer, type YouTubePlayer } from '$lib/utils/youtubeApi';
   import Hls from 'hls.js';
   import { onDestroy } from 'svelte';
 
   interface Props {
     item: MediaItem;
+    onEnded?: () => void;
   }
 
-  let { item }: Props = $props();
+  let { item, onEnded }: Props = $props();
 
   let loading = $state(true);
   let error = $state(false);
   let videoElement: HTMLVideoElement | null = $state(null);
   let hlsInstance: Hls | null = null;
+
+  // YouTube API state
+  let ytPlayer: YouTubePlayer | null = null;
+  let ytPlayerReady = $state(false);
+  let ytApiLoading = $state(false);
+  let useYouTubeApi = $state(true);
 
   // Build embed URL based on type
   const embedUrl = $derived(() => {
@@ -28,9 +36,14 @@
     return null;
   });
 
-  const isEmbed = $derived(item.embedType === 'youtube' || item.embedType === 'vimeo');
+  const isYouTube = $derived(item.embedType === 'youtube' && !!item.videoId);
+  const isVimeo = $derived(item.embedType === 'vimeo' && !!item.videoId);
+  const isEmbed = $derived(isYouTube || isVimeo);
   const isPageLink = $derived(item.embedType === 'page_link');
   const isHlsUrl = $derived(item.url?.includes('.m3u8'));
+
+  // Use YouTube API for YouTube videos (for end detection)
+  const shouldUseYtApi = $derived(isYouTube && useYouTubeApi);
 
   function handleLoad() {
     loading = false;
@@ -40,6 +53,67 @@
   function handleError() {
     loading = false;
     error = true;
+  }
+
+  function handleVideoEnded() {
+    console.log('[MediaViewer VideoPlayer] Video ended');
+    onEnded?.();
+  }
+
+  // YouTube API functions
+  async function initYouTubePlayer() {
+    if (!item.videoId || ytApiLoading || ytPlayerReady) return;
+
+    ytApiLoading = true;
+    console.log('[MediaViewer] Initializing YouTube API player for:', item.videoId);
+
+    try {
+      await loadYouTubeAPI();
+
+      // Clean up any existing player
+      cleanupYouTubePlayer();
+
+      const player = createYouTubePlayer('mv-yt-player-container', item.videoId, {
+        onReady: () => {
+          ytPlayerReady = true;
+          loading = false;
+          console.log('[MediaViewer] YouTube player ready');
+        },
+        onEnded: () => {
+          console.log('[MediaViewer] YouTube video ended');
+          handleVideoEnded();
+        },
+        onError: (errorCode) => {
+          console.warn('[MediaViewer] YouTube player error:', errorCode);
+          // Fall back to iframe embed
+          useYouTubeApi = false;
+          ytApiLoading = false;
+        },
+      });
+
+      if (player) {
+        ytPlayer = player;
+      } else {
+        useYouTubeApi = false;
+      }
+    } catch (err) {
+      console.warn('[MediaViewer] Failed to load YouTube API:', err);
+      useYouTubeApi = false;
+    } finally {
+      ytApiLoading = false;
+    }
+  }
+
+  function cleanupYouTubePlayer() {
+    if (ytPlayer) {
+      try {
+        ytPlayer.destroy();
+      } catch (e) {
+        // Ignore destroy errors
+      }
+      ytPlayer = null;
+    }
+    ytPlayerReady = false;
   }
 
   // Initialize HLS player for .m3u8 URLs
@@ -79,11 +153,26 @@
     }
   });
 
-  // Cleanup HLS instance on destroy
+  // Cleanup HLS and YouTube instances on destroy
   onDestroy(() => {
     if (hlsInstance) {
       hlsInstance.destroy();
       hlsInstance = null;
+    }
+    cleanupYouTubePlayer();
+  });
+
+  // Initialize YouTube API player when needed
+  $effect(() => {
+    if (shouldUseYtApi && item.videoId) {
+      initYouTubePlayer();
+    }
+  });
+
+  // Cleanup YouTube player when switching away or closing
+  $effect(() => {
+    if (!shouldUseYtApi) {
+      cleanupYouTubePlayer();
     }
   });
 
@@ -92,10 +181,12 @@
     if (item) {
       loading = true;
       error = false;
+      useYouTubeApi = true; // Reset to try YT API for new video
       if (hlsInstance) {
         hlsInstance.destroy();
         hlsInstance = null;
       }
+      cleanupYouTubePlayer();
     }
   });
 </script>
@@ -135,7 +226,24 @@
         </div>
       </div>
     </div>
-  {:else if isEmbed && embedUrl()}
+  {:else if shouldUseYtApi}
+    <!-- YouTube video using IFrame API for end detection -->
+    <div class="yt-player-wrapper" class:hidden={loading || ytApiLoading}>
+      <div id="mv-yt-player-container" class="yt-player-container"></div>
+    </div>
+  {:else if isVimeo && embedUrl()}
+    <!-- Vimeo iframe (no API integration yet) -->
+    <iframe
+      src={embedUrl()}
+      title={item.title || 'Video'}
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+      allowfullscreen
+      class:hidden={loading}
+      onload={handleLoad}
+      onerror={handleError}
+    ></iframe>
+  {:else if isYouTube && !useYouTubeApi && embedUrl()}
+    <!-- YouTube fallback iframe (when API fails) -->
     <iframe
       src={embedUrl()}
       title={item.title || 'Video'}
@@ -153,6 +261,7 @@
       class:hidden={loading}
       onloadeddata={handleLoad}
       onerror={handleError}
+      onended={handleVideoEnded}
     >
       <track kind="captions" />
       Your browser does not support the video tag.
@@ -165,6 +274,7 @@
       class:hidden={loading}
       onloadeddata={handleLoad}
       onerror={handleError}
+      onended={handleVideoEnded}
     >
       <source src={item.url} />
       <track kind="captions" />
@@ -193,9 +303,27 @@
     transition: opacity 0.2s ease;
   }
 
-  iframe.hidden, video.hidden {
+  iframe.hidden, video.hidden, .yt-player-wrapper.hidden {
     opacity: 0;
     position: absolute;
+  }
+
+  .yt-player-wrapper {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .yt-player-container {
+    width: 100%;
+    height: 100%;
+  }
+
+  .yt-player-container :global(iframe) {
+    width: 100% !important;
+    height: 100% !important;
   }
 
   .loading, .error {

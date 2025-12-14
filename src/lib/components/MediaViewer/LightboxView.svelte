@@ -13,6 +13,16 @@
       mediaViewer.close();
     }
   }
+
+  function handleVideoEnded() {
+    console.log('[LightboxView] Video ended, hasNext:', mediaViewer.hasNext);
+    if (mediaViewer.hasNext) {
+      mediaViewer.next();
+    } else {
+      // No more items, close the viewer
+      mediaViewer.close();
+    }
+  }
 </script>
 
 <div class="lightbox-overlay" onclick={handleBackdropClick} role="dialog" aria-modal="true">
@@ -40,7 +50,7 @@
         {#if mediaViewer.currentItem.type === 'image'}
           <ImageDisplay item={mediaViewer.currentItem} />
         {:else if mediaViewer.currentItem.type === 'video'}
-          <VideoPlayer item={mediaViewer.currentItem} />
+          <VideoPlayer item={mediaViewer.currentItem} onEnded={handleVideoEnded} />
         {/if}
       {/if}
     </div>

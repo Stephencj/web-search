@@ -2,6 +2,7 @@
   import '$lib/../app.css';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import { VideoPlayerModal, PiPPlayer } from '$lib/components/VideoPlayer';
+  import BackgroundPlaybackHandler from '$lib/components/VideoPlayer/BackgroundPlaybackHandler.svelte';
   import { page } from '$app/stores';
   import { themeStore } from '$lib/stores/theme.svelte';
 
@@ -71,6 +72,9 @@
 
   <!-- Picture-in-Picture Player -->
   <PiPPlayer />
+
+  <!-- Background Playback Handler (no UI) -->
+  <BackgroundPlaybackHandler />
 </div>
 
 <style>

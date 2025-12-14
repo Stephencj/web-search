@@ -35,6 +35,7 @@ def _feed_item_to_response(item: FeedItem, channel: Optional[Channel] = None) ->
         duration_seconds=item.duration_seconds,
         view_count=item.view_count,
         upload_date=item.upload_date,
+        categories=item.categories,
         is_watched=item.is_watched,
         watched_at=item.watched_at,
         watch_progress_seconds=item.watch_progress_seconds,
@@ -46,6 +47,40 @@ def _feed_item_to_response(item: FeedItem, channel: Optional[Channel] = None) ->
     )
 
 
+# Category mappings for mood-based feed modes
+MOOD_CATEGORIES = {
+    "focus_learning": ["Education", "Science & Technology", "Howto & Style"],
+    "stay_positive": ["Comedy", "Entertainment"],
+    "music_mode": ["Music"],
+    "news_politics": ["News & Politics"],
+    "gaming": ["Gaming"],
+}
+
+
+def _apply_mode_preset(mode: str) -> dict:
+    """Apply preset settings for a feed mode."""
+    presets = {
+        # Standard modes - just sorting
+        "newest": {"sort_by": "newest"},
+        "oldest": {"sort_by": "oldest"},
+        "most_viewed": {"sort_by": "views"},
+        "shortest": {"sort_by": "duration_asc"},
+        "longest": {"sort_by": "duration_desc"},
+        "random": {"sort_by": "random"},
+        # Smart modes
+        "catch_up": {"filter": "unwatched", "sort_by": "oldest"},
+        "quick_watch": {"filter": "unwatched", "duration_max": 600, "sort_by": "newest"},
+        "deep_dive": {"filter": "unwatched", "duration_min": 1800, "sort_by": "newest"},
+        # Mood-based modes
+        "focus_learning": {"filter": "unwatched", "categories": MOOD_CATEGORIES["focus_learning"], "sort_by": "newest"},
+        "stay_positive": {"filter": "unwatched", "categories": MOOD_CATEGORIES["stay_positive"], "sort_by": "newest"},
+        "music_mode": {"categories": MOOD_CATEGORIES["music_mode"], "sort_by": "newest"},
+        "news_politics": {"filter": "unwatched", "categories": MOOD_CATEGORIES["news_politics"], "sort_by": "newest"},
+        "gaming": {"filter": "unwatched", "categories": MOOD_CATEGORIES["gaming"], "sort_by": "newest"},
+    }
+    return presets.get(mode, {})
+
+
 @router.get("", response_model=FeedResponse)
 async def get_feed(
     db: DbSession,
@@ -55,39 +90,97 @@ async def get_feed(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=100),
     since: Optional[datetime] = Query(None, description="Only videos uploaded after this date"),
+    # New feed mode parameters
+    mode: Optional[str] = Query(None, description="Feed mode preset (catch_up, quick_watch, etc.)"),
+    sort_by: Optional[str] = Query(None, description="Sort order: newest, oldest, views, duration_asc, duration_desc, random"),
+    category: Optional[str] = Query(None, description="Filter by YouTube category"),
+    duration_min: Optional[int] = Query(None, description="Min duration in seconds"),
+    duration_max: Optional[int] = Query(None, description="Max duration in seconds"),
 ) -> FeedResponse:
     """
-    Get the video feed in chronological order.
+    Get the video feed with flexible sorting and filtering.
 
-    Returns videos from all active subscribed channels, newest first.
+    Supports feed modes (catch_up, quick_watch, deep_dive, mood-based) and custom sorting.
     """
-    # Build query - only include items from active channels
+    from sqlalchemy import or_
+
+    # Apply mode presets (overrides some parameters)
+    category_filter = None
+    if mode:
+        mode_settings = _apply_mode_preset(mode)
+        if "filter" in mode_settings:
+            filter = mode_settings["filter"]
+        if "sort_by" in mode_settings:
+            sort_by = mode_settings["sort_by"]
+        if "duration_min" in mode_settings:
+            duration_min = mode_settings["duration_min"]
+        if "duration_max" in mode_settings:
+            duration_max = mode_settings["duration_max"]
+        if "categories" in mode_settings:
+            category_filter = mode_settings["categories"]
+    elif category:
+        category_filter = [category]
+
+    # Build base query - only include items from active channels
     query = (
         select(FeedItem)
         .join(Channel)
         .where(Channel.is_active == True)
         .options(selectinload(FeedItem.channel))
-        .order_by(desc(FeedItem.upload_date))
     )
 
-    # Apply filters
+    # Apply watch status filter
     if filter == "unwatched":
         query = query.where(FeedItem.is_watched == False)
     elif filter == "watched":
         query = query.where(FeedItem.is_watched == True)
 
+    # Apply platform filter
     if platform:
         query = query.where(FeedItem.platform == platform)
 
+    # Apply channel filter
     if channel_ids:
         ids = [int(id.strip()) for id in channel_ids.split(",") if id.strip().isdigit()]
         if ids:
             query = query.where(FeedItem.channel_id.in_(ids))
 
+    # Apply date filter
     if since:
         query = query.where(FeedItem.upload_date >= since)
 
-    # Get total count
+    # Apply duration filters
+    if duration_min is not None:
+        query = query.where(FeedItem.duration_seconds >= duration_min)
+    if duration_max is not None:
+        query = query.where(FeedItem.duration_seconds <= duration_max)
+
+    # Apply category filter (JSON array contains check for SQLite)
+    if category_filter:
+        category_conditions = []
+        for cat in category_filter:
+            # SQLite JSON contains - check if category string exists in JSON array
+            category_conditions.append(
+                FeedItem.categories.contains(f'"{cat}"')
+            )
+        if category_conditions:
+            query = query.where(or_(*category_conditions))
+
+    # Apply sorting
+    if sort_by == "oldest":
+        query = query.order_by(FeedItem.upload_date.asc())
+    elif sort_by == "views":
+        query = query.order_by(FeedItem.view_count.desc().nullslast())
+    elif sort_by == "duration_asc":
+        query = query.order_by(FeedItem.duration_seconds.asc().nullslast())
+    elif sort_by == "duration_desc":
+        query = query.order_by(FeedItem.duration_seconds.desc().nullslast())
+    elif sort_by == "random":
+        query = query.order_by(func.random())
+    else:  # newest (default)
+        query = query.order_by(desc(FeedItem.upload_date))
+
+    # Get total count (before pagination)
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
@@ -182,6 +275,7 @@ async def get_feed_by_channel(
                 duration_seconds=item.duration_seconds,
                 view_count=item.view_count,
                 upload_date=item.upload_date,
+                categories=item.categories,
                 is_watched=item.is_watched,
                 watched_at=item.watched_at,
                 watch_progress_seconds=item.watch_progress_seconds,
@@ -325,6 +419,72 @@ async def sync_all_feeds(
     background_tasks.add_task(_run_sync_in_background, platform)
 
     return {"status": "started", "message": "Sync started in background"}
+
+
+@router.post("/fix-metadata")
+async def fix_video_metadata(
+    background_tasks: BackgroundTasks,
+    limit: int = Query(100, ge=1, le=500, description="Max videos to fix"),
+) -> dict:
+    """
+    One-time fix for videos with incorrect upload dates.
+
+    Finds videos where upload_date is close to discovered_at (suggesting the
+    fallback was used during sync) and fetches accurate metadata.
+    """
+    background_tasks.add_task(_run_metadata_fix_in_background, limit)
+    return {"status": "started", "message": f"Metadata fix started for up to {limit} videos"}
+
+
+async def _run_metadata_fix_in_background(limit: int):
+    """Background task to fix metadata for existing videos."""
+    from datetime import timedelta
+    from loguru import logger
+    from app.services.feed_sync_service import get_feed_sync_service
+    from app.database import get_session_factory
+
+    logger.info(f"Starting metadata fix (limit={limit})")
+
+    async with get_session_factory()() as db:
+        try:
+            # Find YouTube videos where upload_date is within 2 days of discovered_at
+            # These are likely videos where the fallback was used
+            from sqlalchemy import and_, func as sql_func
+
+            # Get videos where upload and discovered dates are suspiciously close
+            result = await db.execute(
+                select(FeedItem)
+                .where(
+                    and_(
+                        FeedItem.platform == "youtube",
+                        # Check if upload_date is within 48 hours of discovered_at
+                        sql_func.abs(
+                            sql_func.julianday(FeedItem.upload_date) -
+                            sql_func.julianday(FeedItem.discovered_at)
+                        ) < 2
+                    )
+                )
+                .order_by(FeedItem.discovered_at.desc())
+                .limit(limit)
+            )
+            items = list(result.scalars().all())
+
+            if not items:
+                logger.info("No videos need metadata fixing")
+                return
+
+            logger.info(f"Found {len(items)} videos that may need metadata fixing")
+
+            # Use the sync service's metadata fetching
+            service = get_feed_sync_service()
+            video_ids = [item.video_id for item in items]
+
+            await service._fetch_and_update_metadata(db, video_ids)
+
+            logger.info(f"Metadata fix complete for {len(video_ids)} videos")
+
+        except Exception as e:
+            logger.exception(f"Metadata fix failed: {e}")
 
 
 @router.get("/stats", response_model=dict)

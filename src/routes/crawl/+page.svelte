@@ -8,12 +8,12 @@
   let statusFilter = $state<string>('');
   let activeCount = $state(0);
 
-  onMount(async () => {
-    await loadJobs();
+  onMount(() => {
+    loadJobs();
     // Auto-refresh every 5 seconds if there are running jobs
-    const interval = setInterval(async () => {
+    const interval = setInterval(() => {
       if (activeCount > 0) {
-        await loadJobs();
+        loadJobs();
       }
     }, 5000);
     return () => clearInterval(interval);

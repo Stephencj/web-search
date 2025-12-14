@@ -2,7 +2,7 @@
   /**
    * ImageDisplay - Renders an image with loading state and error handling
    */
-  import type { MediaItem } from '$lib/stores/mediaViewer';
+  import type { MediaItem } from '$lib/stores/mediaViewer.svelte';
 
   interface Props {
     item: MediaItem;

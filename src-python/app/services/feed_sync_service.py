@@ -6,6 +6,7 @@ from typing import Optional
 
 from loguru import logger
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -62,6 +63,8 @@ class FeedSyncService:
         self,
         db: AsyncSession,
         platform: Optional[str] = None,
+        parallel: bool = False,
+        max_concurrent: int = 3,
     ) -> list[dict]:
         """
         Sync all active channels.
@@ -69,6 +72,8 @@ class FeedSyncService:
         Args:
             db: Database session
             platform: Optional platform filter
+            parallel: If True, sync multiple channels concurrently
+            max_concurrent: Max concurrent syncs when parallel=True
 
         Returns:
             List of sync results
@@ -81,11 +86,13 @@ class FeedSyncService:
         result = await db.execute(query)
         channels = list(result.scalars().all())
 
-        logger.info(f"Syncing {len(channels)} channels")
+        logger.info(f"Syncing {len(channels)} channels (parallel={parallel})")
 
+        # Filter and handle channels with too many errors
+        active_channels = []
         results = []
+
         for channel in channels:
-            # Deactivate channels with too many consecutive errors
             if channel.consecutive_errors >= 5:
                 logger.warning(
                     f"Deactivating channel {channel.name} due to {channel.consecutive_errors} consecutive errors. "
@@ -100,17 +107,52 @@ class FeedSyncService:
                     "error": f"Deactivated after {channel.consecutive_errors} consecutive errors",
                     "new_videos": 0,
                 })
-                continue
+            else:
+                active_channels.append(channel)
 
-            sync_result = await self.sync_channel(db, channel)
-            results.append({
-                "channel_id": channel.id,
-                "channel_name": channel.name,
-                **sync_result,
-            })
+        if parallel and len(active_channels) > 1:
+            # Parallel sync with semaphore to limit concurrency
+            semaphore = asyncio.Semaphore(max_concurrent)
 
-            # Rate limiting between channels
-            await asyncio.sleep(1.0)
+            async def sync_with_semaphore(ch: Channel) -> dict:
+                async with semaphore:
+                    sync_result = await self.sync_channel(db, ch)
+                    return {
+                        "channel_id": ch.id,
+                        "channel_name": ch.name,
+                        **sync_result,
+                    }
+
+            # Run all syncs concurrently (limited by semaphore)
+            parallel_results = await asyncio.gather(
+                *[sync_with_semaphore(ch) for ch in active_channels],
+                return_exceptions=True
+            )
+
+            for i, res in enumerate(parallel_results):
+                if isinstance(res, Exception):
+                    results.append({
+                        "channel_id": active_channels[i].id,
+                        "channel_name": active_channels[i].name,
+                        "success": False,
+                        "error": str(res),
+                        "new_videos": 0,
+                    })
+                else:
+                    results.append(res)
+        else:
+            # Sequential sync with reduced delay
+            for channel in active_channels:
+                sync_result = await self.sync_channel(db, channel)
+                results.append({
+                    "channel_id": channel.id,
+                    "channel_name": channel.name,
+                    **sync_result,
+                })
+
+                # Reduced rate limiting between channels (0.3s instead of 1s)
+                if len(active_channels) > 1:
+                    await asyncio.sleep(0.3)
 
         return results
 
@@ -119,57 +161,99 @@ class FeedSyncService:
         db: AsyncSession,
         channel: Channel,
     ) -> dict:
-        """Sync a YouTube channel using yt-dlp."""
-        settings = self.settings
-
-        extractor = YouTubeExtractor(
-            max_videos=settings.crawler.youtube_max_videos_per_source,
-            fetch_transcripts=False,  # Skip transcripts for feed sync (faster)
-            rate_limit_delay=settings.crawler.youtube_rate_limit_delay_ms / 1000.0,
-        )
+        """Sync a YouTube channel using yt-dlp with fast flat extraction."""
+        import yt_dlp
 
         new_videos = 0
         skipped = 0
+        new_video_ids = []  # Track new videos for category fetching
 
         try:
-            async for video in extractor.extract(channel.channel_url):
+            # Use flat extraction - much faster, gets basic metadata without full video extraction
+            channel_url = channel.channel_url.rstrip('/')
+            if not any(channel_url.endswith(tab) for tab in ['/videos', '/shorts', '/streams', '/playlists']):
+                channel_url = f"{channel_url}/videos"
+
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': 'in_playlist',
+                'skip_download': True,
+                'ignoreerrors': True,
+                'playlistend': 100,  # Get up to 100 recent videos
+            }
+
+            loop = asyncio.get_event_loop()
+
+            def extract():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return ydl.extract_info(channel_url, download=False)
+
+            info = await loop.run_in_executor(None, extract)
+
+            if not info or 'entries' not in info:
+                logger.warning(f"No videos found for channel {channel.name}")
+                return {"success": True, "new_videos": 0, "skipped": 0}
+
+            for entry in info.get('entries', []):
+                if entry is None:
+                    continue
+
+                video_id = entry.get('id')
+                if not video_id:
+                    continue
+
                 # Check if video already exists
-                existing = await self._get_existing_feed_item(
-                    db, "youtube", video.video_id
-                )
+                existing = await self._get_existing_feed_item(db, "youtube", video_id)
                 if existing:
                     skipped += 1
                     continue
 
-                # Parse upload date
-                upload_date = self._parse_upload_date(video.upload_date)
+                # Parse upload date from flat extraction
+                # Flat extraction may have 'upload_date' or we use current time
+                upload_date_str = entry.get('upload_date')
+                upload_date = self._parse_upload_date(upload_date_str)
 
                 # Skip very old videos on first sync
                 if not channel.last_synced_at:
-                    # On first sync, only get videos from last 30 days
                     if upload_date < datetime.utcnow() - timedelta(days=30):
                         skipped += 1
                         continue
 
-                # Create feed item
+                # Get thumbnail - flat extraction may have it
+                thumbnail_url = entry.get('thumbnail')
+                if not thumbnail_url:
+                    # Fallback to standard YouTube thumbnail
+                    thumbnail_url = f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
+
+                # Create feed item from flat extraction data
                 feed_item = FeedItem(
                     channel_id=channel.id,
                     platform="youtube",
-                    video_id=video.video_id,
-                    video_url=video.video_url,
-                    title=video.title,
-                    description=video.description[:1000] if video.description else None,
-                    thumbnail_url=video.thumbnail_url,
-                    duration_seconds=video.duration_seconds,
-                    view_count=video.view_count,
+                    video_id=video_id,
+                    video_url=f"https://www.youtube.com/watch?v={video_id}",
+                    title=entry.get('title', 'Untitled'),
+                    description=None,  # Not available in flat extraction
+                    thumbnail_url=thumbnail_url,
+                    duration_seconds=entry.get('duration'),
+                    view_count=entry.get('view_count'),
                     upload_date=upload_date,
                 )
 
-                db.add(feed_item)
-                new_videos += 1
+                try:
+                    # Use savepoint to handle potential duplicates without killing the whole transaction
+                    async with db.begin_nested():
+                        db.add(feed_item)
+                        await db.flush()
+                    new_videos += 1
+                    new_video_ids.append(video_id)  # Track for category fetching
+                except IntegrityError:
+                    # Video already exists (race condition or duplicate) - savepoint rolled back automatically
+                    skipped += 1
+                    continue
 
                 # Commit in batches
-                if new_videos % 10 == 0:
+                if new_videos % 20 == 0:
                     await db.commit()
 
                 # Limit new videos per sync
@@ -177,6 +261,10 @@ class FeedSyncService:
                     break
 
             await db.commit()
+
+            # Fetch full metadata for new videos (categories, accurate dates, descriptions)
+            if new_video_ids:
+                await self._fetch_and_update_metadata(db, new_video_ids[:20])  # Limit batch size
 
             logger.info(f"YouTube sync complete for {channel.name}: {new_videos} new, {skipped} skipped")
             return {"success": True, "new_videos": new_videos, "skipped": skipped}
@@ -268,6 +356,84 @@ class FeedSyncService:
             return datetime.strptime(date_str, "%Y%m%d")
         except (ValueError, TypeError):
             return datetime.utcnow()
+
+    async def _fetch_and_update_metadata(
+        self,
+        db: AsyncSession,
+        video_ids: list[str],
+    ) -> None:
+        """
+        Fetch full metadata for YouTube videos and update the database.
+
+        This fetches categories (for mood-based filtering) and accurate upload dates
+        (flat extraction often lacks these). Called after main sync to avoid slowing
+        down the primary sync process.
+        """
+        import yt_dlp
+
+        if not video_ids:
+            return
+
+        logger.info(f"Fetching metadata for {len(video_ids)} new videos")
+        loop = asyncio.get_event_loop()
+
+        for video_id in video_ids:
+            try:
+                url = f"https://www.youtube.com/watch?v={video_id}"
+
+                ydl_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'skip_download': True,
+                    'extract_flat': False,  # Need full extraction for metadata
+                }
+
+                def extract():
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        return ydl.extract_info(url, download=False)
+
+                info = await loop.run_in_executor(None, extract)
+
+                if info:
+                    # Update the feed item with full metadata
+                    result = await db.execute(
+                        select(FeedItem).where(
+                            FeedItem.platform == "youtube",
+                            FeedItem.video_id == video_id,
+                        )
+                    )
+                    feed_item = result.scalar_one_or_none()
+
+                    if feed_item:
+                        updated_fields = []
+
+                        # Update categories if available
+                        if 'categories' in info and info['categories']:
+                            feed_item.categories = info['categories']
+                            updated_fields.append('categories')
+
+                        # Update upload_date if available (more accurate than flat extraction)
+                        if 'upload_date' in info and info['upload_date']:
+                            accurate_date = self._parse_upload_date(info['upload_date'])
+                            feed_item.upload_date = accurate_date
+                            updated_fields.append('upload_date')
+
+                        # Update description if available
+                        if 'description' in info and info['description']:
+                            feed_item.description = info['description'][:2000]  # Limit length
+                            updated_fields.append('description')
+
+                        if updated_fields:
+                            await db.commit()
+                            logger.debug(f"Updated {video_id}: {', '.join(updated_fields)}")
+
+            except Exception as e:
+                logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
+
+            # Rate limiting between requests to avoid getting blocked
+            await asyncio.sleep(0.3)
+
+        logger.info(f"Metadata fetching complete for {len(video_ids)} videos")
 
 
 # Global service instance

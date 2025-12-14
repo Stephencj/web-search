@@ -220,6 +220,7 @@ export interface FeedItem {
   duration_seconds: number | null;
   view_count: number | null;
   upload_date: string;
+  categories: string[] | null;
   is_watched: boolean;
   watched_at: string | null;
   watch_progress_seconds: number | null;
@@ -229,6 +230,12 @@ export interface FeedItem {
   channel_name: string;
   channel_avatar_url: string | null;
 }
+
+// Feed mode types
+export type FeedMode =
+  | 'newest' | 'oldest' | 'most_viewed' | 'shortest' | 'longest' | 'random'
+  | 'catch_up' | 'quick_watch' | 'deep_dive'
+  | 'focus_learning' | 'stay_positive' | 'music_mode' | 'news_politics' | 'gaming';
 
 export interface FeedResponse {
   items: FeedItem[];
@@ -729,6 +736,7 @@ class ApiClient {
   async getCrawlStatus(status?: string, limit?: number): Promise<{
     jobs: CrawlJob[];
     total: number;
+    active_count: number;
   }> {
     const params = new URLSearchParams();
     if (status) params.set('status', status);
@@ -958,6 +966,12 @@ class ApiClient {
     channel_id?: number;
     page?: number;
     per_page?: number;
+    // New feed mode parameters
+    mode?: FeedMode;
+    sort_by?: 'newest' | 'oldest' | 'views' | 'duration_asc' | 'duration_desc' | 'random';
+    category?: string;
+    duration_min?: number;
+    duration_max?: number;
   }): Promise<FeedResponse> {
     const searchParams = new URLSearchParams();
     if (params?.filter) searchParams.set('filter', params.filter);
@@ -965,6 +979,12 @@ class ApiClient {
     if (params?.channel_id) searchParams.set('channel_ids', String(params.channel_id));
     if (params?.page) searchParams.set('page', String(params.page));
     if (params?.per_page) searchParams.set('per_page', String(params.per_page));
+    // New feed mode parameters
+    if (params?.mode) searchParams.set('mode', params.mode);
+    if (params?.sort_by) searchParams.set('sort_by', params.sort_by);
+    if (params?.category) searchParams.set('category', params.category);
+    if (params?.duration_min) searchParams.set('duration_min', String(params.duration_min));
+    if (params?.duration_max) searchParams.set('duration_max', String(params.duration_max));
     const query = searchParams.toString();
     return this.request(`/feed${query ? `?${query}` : ''}`);
   }

@@ -94,8 +94,12 @@
   }
 
   function playVideo(video: SavedVideo) {
-    const videoItem = savedVideoToVideoItem(video);
-    videoPlayer.openModal(videoItem);
+    // Find index of selected video in the current list
+    const index = savedVideos.findIndex(v => v.id === video.id);
+    // Convert all videos to VideoItems for the queue
+    const queue = savedVideos.map(v => savedVideoToVideoItem(v));
+    // Open with queue for playlist auto-advance
+    videoPlayer.openWithQueue(queue, index >= 0 ? index : 0);
     // Mark as watched when playing
     if (!video.is_watched) {
       toggleWatched(video);

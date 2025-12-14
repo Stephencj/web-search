@@ -14,7 +14,7 @@
   import { MediaViewer } from '$lib/components/MediaViewer';
   import { mediaViewer, type MediaItem } from '$lib/stores/mediaViewer.svelte';
 
-  let collectionId = $derived(parseInt($page.params.id));
+  let collectionId = $derived(parseInt($page.params.id || '0'));
   let showEditModal = $state(false);
   let editName = $state('');
   let editDescription = $state('');

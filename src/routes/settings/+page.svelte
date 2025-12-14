@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import { api, type AppSettings, type CrawlerSettings, type ApiKey, type CrawlerSettingsUpdate } from '$lib/api/client';
   import { themeStore, type Theme } from '$lib/stores/theme.svelte';
+  import { playbackPreferences } from '$lib/stores/playbackPreferences.svelte';
   import { ApiKeyModal, PlatformAccountCard } from '$lib/components/Settings';
 
   // Platform account types
@@ -294,6 +295,27 @@
               </button>
             {/each}
           </div>
+        </div>
+      </section>
+
+      <!-- Playback Settings -->
+      <section class="settings-section card">
+        <h2>Playback</h2>
+        <p class="section-description">Configure video playback behavior</p>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>Background Playback</label>
+            <p class="setting-help">Continue playing videos when you switch tabs or minimize the browser</p>
+          </div>
+          <label class="toggle-switch">
+            <input
+              type="checkbox"
+              checked={playbackPreferences.backgroundPlayback}
+              onchange={() => playbackPreferences.toggleBackgroundPlayback()}
+            />
+            <span class="toggle-slider"></span>
+          </label>
         </div>
       </section>
 
@@ -840,6 +862,57 @@
   .theme-label {
     font-size: 0.85rem;
     font-weight: 500;
+  }
+
+  /* Toggle Switch */
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 28px;
+    flex-shrink: 0;
+  }
+
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--color-border);
+    transition: 0.3s;
+    border-radius: 28px;
+  }
+
+  .toggle-slider::before {
+    position: absolute;
+    content: '';
+    height: 20px;
+    width: 20px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+  }
+
+  .toggle-switch input:checked + .toggle-slider {
+    background-color: var(--color-primary);
+  }
+
+  .toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(24px);
+  }
+
+  .toggle-switch input:focus + .toggle-slider {
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
   }
 
   /* Linked Accounts */

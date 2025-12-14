@@ -28,6 +28,7 @@ class ChannelService:
         db: AsyncSession,
         url: str,
         import_source: str = "manual",
+        pre_metadata: Optional[dict] = None,
     ) -> Channel:
         """
         Add a new channel subscription.
@@ -36,6 +37,7 @@ class ChannelService:
             db: Database session
             url: Channel URL (YouTube or Rumble)
             import_source: How the channel was added ("manual", "takeout", "bookmarklet")
+            pre_metadata: Optional pre-fetched metadata (skips yt-dlp fetch)
 
         Returns:
             Created Channel
@@ -65,8 +67,11 @@ class ChannelService:
             logger.info(f"Channel already exists: {existing.name}")
             return existing
 
-        # Fetch channel metadata
-        metadata = await self._fetch_channel_metadata(url, platform)
+        # Use pre-fetched metadata or fetch from platform
+        if pre_metadata:
+            metadata = pre_metadata
+        else:
+            metadata = await self._fetch_channel_metadata(url, platform)
 
         # Create channel
         channel = Channel(
@@ -93,6 +98,7 @@ class ChannelService:
         db: AsyncSession,
         urls: list[str],
         import_source: str = "bookmarklet",
+        metadata_map: Optional[dict[str, dict]] = None,
     ) -> dict:
         """
         Import multiple channels from a list of URLs.
@@ -101,6 +107,7 @@ class ChannelService:
             db: Database session
             urls: List of channel URLs
             import_source: Import source identifier
+            metadata_map: Optional dict mapping URL -> metadata dict (skips yt-dlp fetch)
 
         Returns:
             Dict with imported, skipped, failed counts and details
@@ -109,6 +116,7 @@ class ChannelService:
         skipped = []
         failed = []
         errors = []
+        metadata_map = metadata_map or {}
 
         for url in urls:
             url = url.strip()
@@ -116,7 +124,9 @@ class ChannelService:
                 continue
 
             try:
-                channel = await self.add_channel(db, url, import_source)
+                # Check if we have pre-fetched metadata for this URL
+                pre_metadata = metadata_map.get(url)
+                channel = await self.add_channel(db, url, import_source, pre_metadata=pre_metadata)
                 if channel.created_at.replace(microsecond=0) == channel.updated_at.replace(microsecond=0):
                     # Newly created
                     imported.append(channel)
@@ -131,8 +141,9 @@ class ChannelService:
                 errors.append(f"{url}: Unexpected error - {str(e)}")
                 logger.warning(f"Failed to import channel {url}: {e}")
 
-            # Small delay between imports to avoid rate limiting
-            await asyncio.sleep(0.5)
+            # Very small delay only when not using pre-fetched metadata
+            if not pre_metadata:
+                await asyncio.sleep(0.2)
 
         return {
             "imported": len(imported),

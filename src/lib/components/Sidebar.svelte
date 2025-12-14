@@ -8,7 +8,11 @@
   }
 
   // Props for controlling sidebar state from parent
-  let { isOpen = $bindable(false), onClose = () => {} } = $props();
+  interface Props {
+    isOpen?: boolean;
+    onClose?: () => void;
+  }
+  let { isOpen = $bindable(false), onClose = () => {} }: Props = $props();
 
   const navItems: NavItem[] = [
     { href: '/', label: 'Search', icon: '🔍' },
