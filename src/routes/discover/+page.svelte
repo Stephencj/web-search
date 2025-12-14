@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api, type PlatformInfo, type DiscoverVideoResult, type DiscoverChannelResult, type SearchTiming } from '$lib/api/client';
   import { videoPlayer, discoverVideoToVideoItem, formatDuration } from '$lib/stores/videoPlayer.svelte';
+  import SaveButton from '$lib/components/SaveButton/SaveButton.svelte';
 
   // State
   let platforms = $state<PlatformInfo[]>([]);
@@ -171,6 +172,22 @@
     const platform = platforms.find(p => p.id === platformId);
     return platform?.name || platformId;
   }
+
+  async function searchChannelVideos(channel: DiscoverChannelResult) {
+    // Switch to videos tab and search for the channel name
+    searchType = 'videos';
+    searchQuery = channel.name;
+    // Only search on the channel's platform
+    selectedPlatforms = new Set([channel.platform]);
+    await handleSearch();
+  }
+
+  let collectionSaveSuccess = $state<string | null>(null);
+
+  function handleCollectionSaved(event: { collectionName: string }) {
+    collectionSaveSuccess = `Added to ${event.collectionName}!`;
+    setTimeout(() => collectionSaveSuccess = null, 3000);
+  }
 </script>
 
 <div class="discover-page">
@@ -249,6 +266,10 @@
     <div class="success-message">Saved "{saveSuccess.slice(0, 50)}{saveSuccess.length > 50 ? '...' : ''}"!</div>
   {/if}
 
+  {#if collectionSaveSuccess}
+    <div class="success-message">{collectionSaveSuccess}</div>
+  {/if}
+
   <!-- Timings -->
   {#if timings.length > 0}
     <div class="timings">
@@ -296,6 +317,17 @@
                 <span class="platform-badge" style="background-color: {getPlatformColor(video.platform)}">
                   {getPlatformName(video.platform)}
                 </span>
+                <SaveButton
+                  mediaType="video"
+                  mediaUrl={video.video_url}
+                  thumbnailUrl={video.thumbnail_url}
+                  title={video.title}
+                  sourceUrl={video.video_url}
+                  domain={video.platform}
+                  embedType={video.platform}
+                  videoId={video.video_id}
+                  onsaved={handleCollectionSaved}
+                />
               </div>
             </button>
             <div class="video-info">
@@ -376,6 +408,13 @@
               {/if}
             </div>
             <div class="channel-actions">
+              <button
+                class="action-btn see-all"
+                onclick={() => searchChannelVideos(channel)}
+                title="Search for videos from this channel"
+              >
+                See Videos
+              </button>
               <button
                 class="action-btn subscribe"
                 onclick={() => subscribeToChannel(channel.channel_url, channel.name)}
@@ -803,6 +842,17 @@
     opacity: 0.5;
   }
 
+  .action-btn.see-all {
+    background: var(--color-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+  }
+
+  .action-btn.see-all:hover {
+    background: var(--color-bg-secondary);
+    border-color: var(--color-primary);
+  }
+
   .action-btn.play {
     background: var(--color-bg);
     color: var(--color-text);
@@ -896,7 +946,9 @@
 
   .channel-actions {
     display: flex;
+    flex-direction: column;
     align-items: flex-start;
+    gap: var(--spacing-xs);
   }
 
   /* Empty States */
