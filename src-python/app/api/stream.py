@@ -170,32 +170,50 @@ async def _extract_youtube_stream(
         audio_only: Get audio stream only
 
     Returns:
-        Dict with stream info
+        Dict with stream info including separate video_url and audio_url for
+        highest quality playback (browsers can combine using MediaSource API)
     """
     import yt_dlp
 
-    # Use simple format selection - let yt-dlp choose the best available
-    # For browser playback we need formats that work without merging
+    # YouTube quality strategy:
+    # - Progressive formats (combined video+audio) are limited to ~720p
+    # - DASH formats (separate streams) go up to 4K/8K
+    # - For best quality, we get separate video+audio URLs that modern browsers
+    #   can combine using MediaSource Extensions (MSE)
+    # - The frontend can choose to use combined stream (simpler) or separate (higher quality)
+
+    # YouTube quality strategy for browser playback:
+    # 1. First try high-quality combined formats (have both video+audio, up to 1080p)
+    # 2. Then try DASH (separate video+audio) which can go higher but needs sync
+    # 3. Fall back to any combined format
+    #
+    # Combined formats are preferred because they work directly in browser <video>
+    # DASH formats need frontend to sync separate video+audio elements
+
     if audio_only:
-        format_str = "bestaudio/best"
+        format_str = "bestaudio[ext=m4a]/bestaudio/best"
     elif quality == "1080p":
-        format_str = "best[height<=1080]/best"
+        # Try 1080p combined first, then DASH, then fall back
+        format_str = "best[height<=1080][ext=mp4]/best[height<=1080]/bestvideo[height<=1080]+bestaudio/best"
     elif quality == "720p":
-        format_str = "best[height<=720]/best"
+        format_str = "best[height<=720][ext=mp4]/best[height<=720]/bestvideo[height<=720]+bestaudio/best"
     elif quality == "480p":
-        format_str = "best[height<=480]/best"
+        format_str = "best[height<=480][ext=mp4]/best[height<=480]/bestvideo[height<=480]+bestaudio/best"
     elif quality == "worst":
         format_str = "worst"
     else:
-        format_str = "best"
+        # "best" = highest quality available for browser playback
+        # Try highest combined format first (usually up to 1080p on YouTube)
+        # Then try DASH for even higher quality (4K) with separate streams
+        format_str = "best[ext=mp4]/best/bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio"
 
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "format": format_str,
         "skip_download": True,
-        # Required for YouTube to return proper formats
-        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+        # Note: Don't use android player_client - it returns only 360p combined formats
+        # Default web client returns up to 1080p combined + higher quality DASH
     }
 
     # Note: OAuth tokens don't work directly with yt-dlp for YouTube
@@ -215,26 +233,49 @@ async def _extract_youtube_stream(
                     "duration": info.get("duration"),
                 }
 
-                # Get the actual stream URL
-                if "url" in info:
-                    result["stream_url"] = info["url"]
-                    result["quality"] = info.get("format_note") or info.get("resolution")
-                    result["format"] = info.get("ext")
-                elif "requested_formats" in info:
-                    # Separate video and audio streams
+                # Get the actual stream URLs
+                if "requested_formats" in info:
+                    # Separate video and audio streams (DASH - highest quality)
                     for fmt in info["requested_formats"]:
-                        if fmt.get("vcodec") != "none":
+                        if fmt.get("vcodec") != "none" and fmt.get("acodec") == "none":
+                            # Video-only stream
                             result["stream_url"] = fmt.get("url")
-                            result["quality"] = fmt.get("format_note") or fmt.get("resolution")
+                            height = fmt.get("height")
+                            result["quality"] = f"{height}p" if height else fmt.get("format_note")
                             result["format"] = fmt.get("ext")
-                        if fmt.get("acodec") != "none":
+                            result["vcodec"] = fmt.get("vcodec")
+                            result["width"] = fmt.get("width")
+                            result["height"] = height
+                            result["fps"] = fmt.get("fps")
+                        elif fmt.get("acodec") != "none":
+                            # Audio stream
                             result["audio_url"] = fmt.get("url")
+                            result["acodec"] = fmt.get("acodec")
+                            result["audio_bitrate"] = fmt.get("abr")
+                elif "url" in info:
+                    # Single combined stream (progressive - usually ≤720p)
+                    result["stream_url"] = info["url"]
+                    height = info.get("height")
+                    result["quality"] = f"{height}p" if height else info.get("format_note") or info.get("resolution")
+                    result["format"] = info.get("ext")
+                    result["height"] = height
+                    result["fps"] = info.get("fps")
+                    # Combined streams have audio built-in, no separate audio_url needed
                 elif "formats" in info and info["formats"]:
-                    # Fallback to first available format
-                    fmt = info["formats"][-1]
-                    result["stream_url"] = fmt.get("url")
-                    result["quality"] = fmt.get("format_note")
-                    result["format"] = fmt.get("ext")
+                    # Fallback: find best available format
+                    # Sort by height (resolution) descending
+                    sorted_formats = sorted(
+                        [f for f in info["formats"] if f.get("url")],
+                        key=lambda f: (f.get("height") or 0, f.get("tbr") or 0),
+                        reverse=True
+                    )
+                    if sorted_formats:
+                        fmt = sorted_formats[0]
+                        result["stream_url"] = fmt.get("url")
+                        height = fmt.get("height")
+                        result["quality"] = f"{height}p" if height else fmt.get("format_note")
+                        result["format"] = fmt.get("ext")
+                        result["height"] = height
 
                 return result
 

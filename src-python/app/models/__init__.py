@@ -13,6 +13,9 @@ from app.models.feed_item import FeedItem
 from app.models.saved_video import SavedVideo
 from app.models.playlist import Playlist
 from app.models.platform_account import PlatformAccount
+from app.models.user import User
+from app.models.user_session import UserSession
+from app.models.user_watch_state import UserWatchState
 
 __all__ = [
     "Index",
@@ -29,4 +32,7 @@ __all__ = [
     "SavedVideo",
     "Playlist",
     "PlatformAccount",
+    "User",
+    "UserSession",
+    "UserWatchState",
 ]

@@ -657,9 +657,40 @@
               autoplay
               class="direct-video"
               onended={handleVideoEnded}
+              onplay={() => {
+                // Sync audio when video plays
+                if (audioElement && streamInfo?.audio_url) {
+                  audioElement.currentTime = videoElement?.currentTime || 0;
+                  audioElement.play().catch(() => {});
+                }
+                startProgressTracking();
+              }}
+              onpause={() => {
+                // Sync audio when video pauses
+                if (audioElement) {
+                  audioElement.pause();
+                }
+                const currentTime = getCurrentPlaybackTime();
+                if (currentTime > 0) saveProgress(currentTime);
+              }}
+              onseeked={() => {
+                // Sync audio when video seeks
+                if (audioElement && videoElement) {
+                  audioElement.currentTime = videoElement.currentTime;
+                }
+              }}
             >
               Your browser does not support video playback.
             </video>
+            {#if streamInfo.audio_url}
+              <!-- Separate audio stream for high-quality DASH playback -->
+              <audio
+                bind:this={audioElement}
+                src={streamInfo.audio_url}
+                class="hidden-audio"
+              >
+              </audio>
+            {/if}
             {#if streamInfo.quality}
               <span class="quality-badge">{streamInfo.quality}</span>
             {/if}
@@ -917,6 +948,10 @@
     font-weight: 600;
     border-radius: var(--radius-sm);
     pointer-events: none;
+  }
+
+  .hidden-audio {
+    display: none;
   }
 
   /* Audio Player Styles */

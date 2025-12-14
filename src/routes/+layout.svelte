@@ -4,7 +4,9 @@
   import { VideoPlayerModal, PiPPlayer } from '$lib/components/VideoPlayer';
   import BackgroundPlaybackHandler from '$lib/components/VideoPlayer/BackgroundPlaybackHandler.svelte';
   import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { themeStore } from '$lib/stores/theme.svelte';
+  import { auth } from '$lib/stores/auth.svelte';
 
   let { children } = $props();
   let sidebarOpen = $state(false);
@@ -14,6 +16,29 @@
     const cleanup = themeStore.init();
     return cleanup;
   });
+
+  // Initialize auth on mount
+  $effect(() => {
+    auth.init();
+  });
+
+  // Auth guard - always redirect to login if not authenticated
+  $effect(() => {
+    if (auth.isInitialized && !auth.isLoading) {
+      const currentPath = $page.url.pathname;
+      const isLoginPage = currentPath === '/login';
+      const isSettingsPage = currentPath.startsWith('/settings');
+
+      // Always redirect to login if not authenticated
+      // Allow settings pages for initial setup
+      if (!auth.isAuthenticated && !isLoginPage && !isSettingsPage) {
+        goto('/login');
+      }
+    }
+  });
+
+  // Check if we should show the full app layout (not on login page)
+  const isLoginPage = $derived($page.url.pathname === '/login');
 
   function toggleSidebar() {
     sidebarOpen = !sidebarOpen;
@@ -25,60 +50,71 @@
 
   // Get current page title for mobile header
   function getPageTitle(pathname: string): string {
-    if (pathname === '/') return 'Search';
-    if (pathname.startsWith('/discover')) return 'Discover';
-    if (pathname.startsWith('/saved')) return 'Saved';
+    if (pathname === '/' || pathname.startsWith('/discover')) return 'Discover';
     if (pathname.startsWith('/feed')) return 'Feed';
-    if (pathname.startsWith('/history')) return 'History';
     if (pathname.startsWith('/subscriptions')) return 'Subscriptions';
+    if (pathname.startsWith('/saved')) return 'Saved';
     if (pathname.startsWith('/collections')) return 'Collections';
+    if (pathname.startsWith('/history')) return 'History';
+    if (pathname.startsWith('/crawler')) return 'Web Crawler';
     if (pathname.startsWith('/indexes')) return 'Indexes';
-    if (pathname.startsWith('/crawl')) return 'Crawl Status';
     if (pathname.startsWith('/settings')) return 'Settings';
     return 'WebSearch';
   }
 </script>
 
-<div class="app-layout">
-  <!-- Mobile Header -->
-  <header class="mobile-header hide-desktop">
-    <button class="hamburger-btn" onclick={toggleSidebar} aria-label="Toggle menu">
-      <span class="hamburger-icon">
-        <span></span>
-        <span></span>
-        <span></span>
-      </span>
-    </button>
-    <h1 class="mobile-title">{getPageTitle($page.url.pathname)}</h1>
-  </header>
-
-  <!-- Overlay for mobile sidebar -->
-  <div
-    class="mobile-overlay"
-    class:active={sidebarOpen}
-    onclick={closeSidebar}
-    role="button"
-    tabindex="-1"
-    aria-label="Close sidebar"
-  ></div>
-
-  <Sidebar bind:isOpen={sidebarOpen} onClose={closeSidebar} />
-
-  <main class="main-content">
+{#if isLoginPage}
+  <!-- Login page - full screen, no sidebar -->
+  <main class="login-layout">
     {@render children()}
   </main>
+{:else}
+  <div class="app-layout">
+    <!-- Mobile Header -->
+    <header class="mobile-header hide-desktop">
+      <button class="hamburger-btn" onclick={toggleSidebar} aria-label="Toggle menu">
+        <span class="hamburger-icon">
+          <span></span>
+          <span></span>
+          <span></span>
+        </span>
+      </button>
+      <h1 class="mobile-title">{getPageTitle($page.url.pathname)}</h1>
+    </header>
 
-  <!-- Global Video Player Modal -->
-  <VideoPlayerModal />
+    <!-- Overlay for mobile sidebar -->
+    <div
+      class="mobile-overlay"
+      class:active={sidebarOpen}
+      onclick={closeSidebar}
+      role="button"
+      tabindex="-1"
+      aria-label="Close sidebar"
+    ></div>
 
-  <!-- Picture-in-Picture Player -->
-  <PiPPlayer />
+    <Sidebar bind:isOpen={sidebarOpen} onClose={closeSidebar} />
 
-  <!-- Background Playback Handler (no UI) -->
-  <BackgroundPlaybackHandler />
-</div>
+    <main class="main-content">
+      {@render children()}
+    </main>
+
+    <!-- Global Video Player Modal -->
+    <VideoPlayerModal />
+
+    <!-- Picture-in-Picture Player -->
+    <PiPPlayer />
+
+    <!-- Background Playback Handler (no UI) -->
+    <BackgroundPlaybackHandler />
+  </div>
+{/if}
 
 <style>
+  .login-layout {
+    min-height: 100vh;
+    background: var(--color-bg);
+  }
+
   .app-layout {
     display: flex;
     min-height: 100vh;

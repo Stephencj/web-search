@@ -349,6 +349,22 @@
     <div class="loading">Loading settings...</div>
   {:else if settings}
     <div class="settings-sections">
+      <!-- Users & Security -->
+      <section class="settings-section card">
+        <h2>Users & Security</h2>
+        <p class="section-description">Manage user profiles and authentication</p>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <label>User Profiles</label>
+            <p class="setting-help">Create and manage user profiles with optional PIN protection</p>
+          </div>
+          <a href="/settings/users" class="btn btn-secondary">
+            Manage Users
+          </a>
+        </div>
+      </section>
+
       <!-- Appearance Settings -->
       <section class="settings-section card">
         <h2>Appearance</h2>

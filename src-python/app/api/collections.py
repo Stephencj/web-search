@@ -3,11 +3,11 @@
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
 from loguru import logger
 
-from app.api.deps import DbSession
+from app.api.deps import DbSession, CurrentUserOrDefault
 from app.models import Collection, CollectionItem
 from app.schemas.collection import (
     CollectionCreate,
@@ -61,11 +61,12 @@ def _item_to_response(item: CollectionItem) -> CollectionItemResponse:
 
 
 @router.get("", response_model=CollectionListResponse)
-async def list_collections(db: DbSession) -> CollectionListResponse:
-    """List all collections with item counts."""
+async def list_collections(db: DbSession, user: CurrentUserOrDefault) -> CollectionListResponse:
+    """List all collections for the current user."""
     result = await db.execute(
         select(Collection)
         .options(selectinload(Collection.items))
+        .where(or_(Collection.user_id == user.id, Collection.user_id.is_(None)))
         .order_by(Collection.sort_order, Collection.name)
     )
     collections = result.scalars().all()
@@ -77,10 +78,15 @@ async def list_collections(db: DbSession) -> CollectionListResponse:
 
 
 @router.post("", response_model=CollectionResponse, status_code=status.HTTP_201_CREATED)
-async def create_collection(data: CollectionCreate, db: DbSession) -> CollectionResponse:
-    """Create a new collection."""
-    # Check for duplicate name
-    existing = await db.execute(select(Collection).where(Collection.name == data.name))
+async def create_collection(data: CollectionCreate, db: DbSession, user: CurrentUserOrDefault) -> CollectionResponse:
+    """Create a new collection for the current user."""
+    # Check for duplicate name for this user
+    existing = await db.execute(
+        select(Collection).where(
+            Collection.name == data.name,
+            Collection.user_id == user.id
+        )
+    )
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -91,21 +97,25 @@ async def create_collection(data: CollectionCreate, db: DbSession) -> Collection
         name=data.name,
         description=data.description,
     )
+    collection.user_id = user.id
     db.add(collection)
     await db.flush()
     await db.refresh(collection)
 
-    logger.info(f"Created collection '{collection.name}' (id={collection.id})")
+    logger.info(f"Created collection '{collection.name}' (id={collection.id}) for user {user.id}")
     return _collection_to_response(collection)
 
 
 @router.get("/{collection_id}", response_model=CollectionWithItemsResponse)
-async def get_collection(collection_id: int, db: DbSession) -> CollectionWithItemsResponse:
+async def get_collection(collection_id: int, db: DbSession, user: CurrentUserOrDefault) -> CollectionWithItemsResponse:
     """Get a collection with all its items."""
     result = await db.execute(
         select(Collection)
         .options(selectinload(Collection.items))
-        .where(Collection.id == collection_id)
+        .where(
+            Collection.id == collection_id,
+            or_(Collection.user_id == user.id, Collection.user_id.is_(None))
+        )
     )
     collection = result.scalar_one_or_none()
 
@@ -131,13 +141,16 @@ async def get_collection(collection_id: int, db: DbSession) -> CollectionWithIte
 
 @router.put("/{collection_id}", response_model=CollectionResponse)
 async def update_collection(
-    collection_id: int, data: CollectionUpdate, db: DbSession
+    collection_id: int, data: CollectionUpdate, db: DbSession, user: CurrentUserOrDefault
 ) -> CollectionResponse:
     """Update a collection's name, description, or sort order."""
     result = await db.execute(
         select(Collection)
         .options(selectinload(Collection.items))
-        .where(Collection.id == collection_id)
+        .where(
+            Collection.id == collection_id,
+            or_(Collection.user_id == user.id, Collection.user_id.is_(None))
+        )
     )
     collection = result.scalar_one_or_none()
 
@@ -160,9 +173,14 @@ async def update_collection(
 
 
 @router.delete("/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_collection(collection_id: int, db: DbSession) -> None:
+async def delete_collection(collection_id: int, db: DbSession, user: CurrentUserOrDefault) -> None:
     """Delete a collection and all its items."""
-    result = await db.execute(select(Collection).where(Collection.id == collection_id))
+    result = await db.execute(
+        select(Collection).where(
+            Collection.id == collection_id,
+            or_(Collection.user_id == user.id, Collection.user_id.is_(None))
+        )
+    )
     collection = result.scalar_one_or_none()
 
     if not collection:
@@ -180,14 +198,17 @@ async def delete_collection(collection_id: int, db: DbSession) -> None:
 
 @router.post("/{collection_id}/items", response_model=CollectionItemResponse, status_code=status.HTTP_201_CREATED)
 async def add_item_to_collection(
-    collection_id: int, data: CollectionItemCreate, db: DbSession
+    collection_id: int, data: CollectionItemCreate, db: DbSession, user: CurrentUserOrDefault
 ) -> CollectionItemResponse:
     """Add an item (image or video) to a collection."""
-    # Verify collection exists
+    # Verify collection exists and belongs to user
     result = await db.execute(
         select(Collection)
         .options(selectinload(Collection.items))
-        .where(Collection.id == collection_id)
+        .where(
+            Collection.id == collection_id,
+            or_(Collection.user_id == user.id, Collection.user_id.is_(None))
+        )
     )
     collection = result.scalar_one_or_none()
 
@@ -320,22 +341,26 @@ async def reorder_items(
 
 
 @router.post("/quick-add", response_model=CollectionItemResponse, status_code=status.HTTP_201_CREATED)
-async def quick_add_to_favorites(data: QuickAddRequest, db: DbSession) -> CollectionItemResponse:
+async def quick_add_to_favorites(data: QuickAddRequest, db: DbSession, user: CurrentUserOrDefault) -> CollectionItemResponse:
     """Quick-add an item to the default Favorites collection (creates it if needed)."""
-    # Get or create Favorites collection
+    # Get or create Favorites collection for this user
     result = await db.execute(
         select(Collection)
         .options(selectinload(Collection.items))
-        .where(Collection.name == FAVORITES_NAME)
+        .where(
+            Collection.name == FAVORITES_NAME,
+            Collection.user_id == user.id
+        )
     )
     collection = result.scalar_one_or_none()
 
     if not collection:
         collection = Collection.create(name=FAVORITES_NAME, description="Quick-saved favorites")
+        collection.user_id = user.id
         db.add(collection)
         await db.flush()
         await db.refresh(collection)
-        logger.info(f"Created default '{FAVORITES_NAME}' collection")
+        logger.info(f"Created default '{FAVORITES_NAME}' collection for user {user.id}")
 
     # Check for duplicate
     existing = await db.execute(
@@ -380,12 +405,15 @@ async def quick_add_to_favorites(data: QuickAddRequest, db: DbSession) -> Collec
 
 
 @router.get("/export/{collection_id}")
-async def export_collection(collection_id: int, db: DbSession) -> JSONResponse:
+async def export_collection(collection_id: int, db: DbSession, user: CurrentUserOrDefault) -> JSONResponse:
     """Export a collection as JSON."""
     result = await db.execute(
         select(Collection)
         .options(selectinload(Collection.items))
-        .where(Collection.id == collection_id)
+        .where(
+            Collection.id == collection_id,
+            or_(Collection.user_id == user.id, Collection.user_id.is_(None))
+        )
     )
     collection = result.scalar_one_or_none()
 

@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -17,10 +17,16 @@ class Channel(Base):
     Represents a subscribed video channel (YouTube, Rumble, etc.).
 
     Tracks channel metadata and sync status for the personal feed.
+    Subscriptions are per-user.
     """
     __tablename__ = "channels"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+
+    # User ownership
+    user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
 
     # Platform identification
     platform: Mapped[str] = mapped_column(
@@ -65,9 +71,9 @@ class Channel(Base):
         lazy="selectin"
     )
 
-    # Unique constraint: one channel per platform
+    # Unique constraint: one channel per platform per user
     __table_args__ = (
-        UniqueConstraint('platform', 'platform_channel_id', name='uix_platform_channel'),
+        UniqueConstraint('user_id', 'platform', 'platform_channel_id', name='uix_user_platform_channel'),
     )
 
     @property
