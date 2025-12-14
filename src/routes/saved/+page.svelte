@@ -93,13 +93,27 @@
     }
   }
 
-  function playVideo(video: SavedVideo) {
+  async function playVideo(video: SavedVideo) {
     // Find index of selected video in the current list
     const index = savedVideos.findIndex(v => v.id === video.id);
+
+    // Fetch fresh progress for the clicked video
+    let freshVideo = video;
+    try {
+      freshVideo = await api.getSavedVideo(video.id);
+    } catch {
+      // Use cached data if fetch fails
+    }
+
     // Convert all videos to VideoItems for the queue
-    const queue = savedVideos.map(v => savedVideoToVideoItem(v));
+    // Use fresh data for the clicked video to ensure correct playhead
+    const queue = savedVideos.map(v =>
+      v.id === video.id ? savedVideoToVideoItem(freshVideo) : savedVideoToVideoItem(v)
+    );
+
     // Open with queue for playlist auto-advance
     videoPlayer.openWithQueue(queue, index >= 0 ? index : 0);
+
     // Mark as watched when playing
     if (!video.is_watched) {
       toggleWatched(video);

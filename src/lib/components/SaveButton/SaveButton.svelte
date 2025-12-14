@@ -128,13 +128,20 @@
   <div
     class="modal-backdrop"
     onclick={closeModal}
+    ontouchend={closeModal}
     onkeydown={(e) => e.key === 'Escape' && closeModal()}
     role="presentation"
     transition:fade={{ duration: 150 }}
   ></div>
 
   <!-- Bottom Sheet Modal -->
-  <div class="bottom-sheet" role="dialog" aria-label="Save to collection">
+  <div
+    class="bottom-sheet"
+    role="dialog"
+    aria-label="Save to collection"
+    onclick={(e) => e.stopPropagation()}
+    ontouchstart={(e) => e.stopPropagation()}
+  >
     <div class="sheet-header">
       <div class="sheet-handle"></div>
       <h3>Save to Collection</h3>
@@ -149,7 +156,11 @@
 
     <div class="sheet-content">
       <!-- Quick Add to Favorites -->
-      <button class="collection-option favorites" onclick={handleAddToFavorites} disabled={saving}>
+      <button
+        class="collection-option favorites"
+        onclick={handleAddToFavorites}
+        disabled={saving}
+      >
         <span class="option-icon favorites-icon">
           <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
             <path
@@ -258,6 +269,8 @@
     opacity: 0;
     transition: opacity 0.2s, background 0.2s, transform 0.2s;
     z-index: 10;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .save-btn:hover {
@@ -295,6 +308,7 @@
     inset: 0;
     background: rgba(0, 0, 0, 0.5);
     z-index: 1000;
+    touch-action: none;
   }
 
   /* Bottom Sheet */
@@ -384,14 +398,17 @@
     border: none;
     color: var(--color-text-secondary, #a0a0c0);
     cursor: pointer;
-    padding: 4px;
+    padding: 8px;
     border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .close-btn:hover {
+  .close-btn:hover,
+  .close-btn:active {
     color: var(--color-text, #fff);
   }
 
@@ -413,10 +430,17 @@
     text-align: left;
     transition: background 0.15s;
     color: var(--color-text, #fff);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
   }
 
   .collection-option:hover:not(:disabled) {
     background: var(--hover-bg, #2a2a4a);
+  }
+
+  .collection-option:active:not(:disabled) {
+    background: var(--hover-bg, #3a3a5a);
   }
 
   .collection-option:disabled {
@@ -535,6 +559,8 @@
   .collections-list {
     max-height: 200px;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   .new-collection-form {
@@ -567,15 +593,37 @@
     font-weight: 500;
     cursor: pointer;
     white-space: nowrap;
-    transition: opacity 0.15s;
+    transition: opacity 0.15s, background 0.15s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .create-btn:hover:not(:disabled) {
     opacity: 0.9;
   }
 
+  .create-btn:active:not(:disabled) {
+    background: var(--color-primary-dark, #4f46e5);
+  }
+
   .create-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* Mobile-specific improvements */
+  @media (max-width: 768px) {
+    .collection-option {
+      padding: 16px 20px;
+      min-height: 56px;
+    }
+
+    .sheet-content {
+      padding-bottom: 20px;
+    }
+
+    .close-btn {
+      padding: 12px;
+    }
   }
 </style>

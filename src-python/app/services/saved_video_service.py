@@ -249,6 +249,22 @@ class SavedVideoService:
         await db.refresh(video)
         return video
 
+    async def update_progress(
+        self,
+        db: AsyncSession,
+        video_id: int,
+        progress_seconds: int,
+    ) -> Optional[SavedVideo]:
+        """Update watch progress without marking as watched."""
+        video = await self.get_saved_video(db, video_id)
+        if not video:
+            return None
+
+        video.watch_progress_seconds = progress_seconds
+        await db.commit()
+        await db.refresh(video)
+        return video
+
     async def delete_saved_video(
         self,
         db: AsyncSession,

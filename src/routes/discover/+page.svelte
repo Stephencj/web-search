@@ -299,37 +299,35 @@
       <div class="video-grid">
         {#each videoResults as video}
           <div class="video-card">
-            <button class="thumbnail-btn" onclick={() => playVideo(video)}>
-              <div class="thumbnail">
-                {#if video.thumbnail_url}
-                  <img src={video.thumbnail_url} alt={video.title} loading="lazy" />
-                {:else}
-                  <div class="no-thumbnail">No Thumbnail</div>
-                {/if}
-                <div class="play-overlay">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                </div>
-                {#if video.duration_seconds}
-                  <span class="duration">{formatDuration(video.duration_seconds)}</span>
-                {/if}
-                <span class="platform-badge" style="background-color: {getPlatformColor(video.platform)}">
-                  {getPlatformName(video.platform)}
-                </span>
-                <SaveButton
-                  mediaType="video"
-                  mediaUrl={video.video_url}
-                  thumbnailUrl={video.thumbnail_url}
-                  title={video.title}
-                  sourceUrl={video.video_url}
-                  domain={video.platform}
-                  embedType={video.platform}
-                  videoId={video.video_id}
-                  onsaved={handleCollectionSaved}
-                />
-              </div>
-            </button>
+            <div class="thumbnail">
+              {#if video.thumbnail_url}
+                <img src={video.thumbnail_url} alt={video.title} loading="lazy" />
+              {:else}
+                <div class="no-thumbnail">No Thumbnail</div>
+              {/if}
+              <button class="play-overlay" onclick={() => playVideo(video)} aria-label="Play video">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="48" height="48">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </button>
+              {#if video.duration_seconds}
+                <span class="duration">{formatDuration(video.duration_seconds)}</span>
+              {/if}
+              <span class="platform-badge" style="background-color: {getPlatformColor(video.platform)}">
+                {getPlatformName(video.platform)}
+              </span>
+              <SaveButton
+                mediaType="video"
+                mediaUrl={video.video_url}
+                thumbnailUrl={video.thumbnail_url}
+                title={video.title}
+                sourceUrl={video.video_url}
+                domain={video.platform}
+                embedType={video.platform}
+                videoId={video.video_id}
+                onsaved={handleCollectionSaved}
+              />
+            </div>
             <div class="video-info">
               <a href={video.video_url} target="_blank" rel="noopener noreferrer" class="video-title">
                 {video.title}
@@ -688,20 +686,12 @@
     box-shadow: var(--shadow-md);
   }
 
-  .thumbnail-btn {
-    display: block;
-    width: 100%;
-    padding: 0;
-    border: none;
-    background: none;
-    cursor: pointer;
-  }
-
   .thumbnail {
     position: relative;
     aspect-ratio: 16 / 9;
     background: var(--color-bg);
     overflow: hidden;
+    cursor: pointer;
   }
 
   .thumbnail img {
@@ -730,9 +720,12 @@
     opacity: 0;
     transition: opacity 0.2s;
     color: white;
+    border: none;
+    cursor: pointer;
+    z-index: 1;
   }
 
-  .thumbnail-btn:hover .play-overlay {
+  .thumbnail:hover .play-overlay {
     opacity: 1;
   }
 
