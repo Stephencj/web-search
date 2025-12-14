@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { api, type PlatformInfo, type DiscoverVideoResult, type DiscoverChannelResult, type SearchTiming } from '$lib/api/client';
-  import { videoPlayer, discoverVideoToVideoItem, formatDuration } from '$lib/stores/videoPlayer.svelte';
+  import { api, type PlatformInfo, type DiscoverVideoResult, type DiscoverChannelResult, type SearchTiming, type FeedItem } from '$lib/api/client';
+  import { videoPlayer, discoverVideoToVideoItem, formatDuration, feedItemToVideoItem, openFeedVideo } from '$lib/stores/videoPlayer.svelte';
   import SaveButton from '$lib/components/SaveButton/SaveButton.svelte';
 
   // State
@@ -19,6 +19,20 @@
   let savingVideo = $state<string | null>(null);
   let saveSuccess = $state<string | null>(null);
   let savedVideoIds = $state<Set<string>>(new Set());
+
+  // Mood browsing state
+  type MoodType = 'focus_learning' | 'stay_positive' | 'music_mode' | 'news_politics' | 'gaming';
+  const MOOD_OPTIONS: { id: MoodType; label: string; icon: string; description: string }[] = [
+    { id: 'focus_learning', label: 'Focus & Learning', icon: '📚', description: 'Education, Science, How-to' },
+    { id: 'stay_positive', label: 'Stay Positive', icon: '😄', description: 'Comedy, Entertainment' },
+    { id: 'music_mode', label: 'Music Mode', icon: '🎵', description: 'Music videos & performances' },
+    { id: 'news_politics', label: 'News & Politics', icon: '📰', description: 'Current events, Politics' },
+    { id: 'gaming', label: 'Gaming', icon: '🎮', description: 'Gaming content' },
+  ];
+  let selectedMood = $state<MoodType | null>(null);
+  let moodVideos = $state<FeedItem[]>([]);
+  let loadingMood = $state(false);
+  let moodError = $state<string | null>(null);
 
   // Load platforms on mount
   $effect(() => {
@@ -188,6 +202,48 @@
     collectionSaveSuccess = `Added to ${event.collectionName}!`;
     setTimeout(() => collectionSaveSuccess = null, 3000);
   }
+
+  async function selectMood(mood: MoodType) {
+    if (selectedMood === mood) {
+      // Deselect if clicking same mood
+      selectedMood = null;
+      moodVideos = [];
+      return;
+    }
+
+    selectedMood = mood;
+    loadingMood = true;
+    moodError = null;
+    moodVideos = [];
+
+    try {
+      const response = await api.getFeed({
+        mode: mood,
+        per_page: 20,
+      });
+      moodVideos = response.items;
+      if (moodVideos.length === 0) {
+        moodError = `No ${MOOD_OPTIONS.find(m => m.id === mood)?.label} videos found in your subscriptions. Videos need category data - try running "Fix Dates" in Settings to fetch categories.`;
+      }
+    } catch (e) {
+      moodError = e instanceof Error ? e.message : 'Failed to load videos';
+    } finally {
+      loadingMood = false;
+    }
+  }
+
+  function playMoodVideo(item: FeedItem) {
+    // Build queue from mood videos
+    const videoQueue = moodVideos.map(v => feedItemToVideoItem(v));
+    const videoIndex = moodVideos.findIndex(v => v.id === item.id);
+    videoPlayer.openWithQueue(videoQueue, videoIndex >= 0 ? videoIndex : 0);
+  }
+
+  function clearMood() {
+    selectedMood = null;
+    moodVideos = [];
+    moodError = null;
+  }
 </script>
 
 <div class="discover-page">
@@ -196,8 +252,76 @@
     <p class="subtitle">Search across multiple video platforms</p>
   </header>
 
+  <!-- Browse by Mood Section -->
+  <div class="mood-section">
+    <div class="section-header">
+      <h2>Browse by Mood</h2>
+      <span class="section-subtitle">Quick access to videos from your subscriptions by category</span>
+    </div>
+    <div class="mood-buttons">
+      {#each MOOD_OPTIONS as mood}
+        <button
+          class="mood-btn"
+          class:selected={selectedMood === mood.id}
+          onclick={() => selectMood(mood.id)}
+        >
+          <span class="mood-icon">{mood.icon}</span>
+          <span class="mood-label">{mood.label}</span>
+          <span class="mood-desc">{mood.description}</span>
+        </button>
+      {/each}
+    </div>
+
+    {#if loadingMood}
+      <div class="mood-loading">
+        <div class="loading-spinner"></div>
+        <span>Loading {MOOD_OPTIONS.find(m => m.id === selectedMood)?.label} videos...</span>
+      </div>
+    {:else if moodError}
+      <div class="mood-error">{moodError}</div>
+    {:else if moodVideos.length > 0}
+      <div class="mood-results">
+        <div class="mood-results-header">
+          <span class="mood-count">{moodVideos.length} videos</span>
+          <button class="clear-mood-btn" onclick={clearMood}>Clear</button>
+        </div>
+        <div class="mood-video-grid">
+          {#each moodVideos as item}
+            <div class="mood-video-card">
+              <button class="mood-thumbnail" onclick={() => playMoodVideo(item)}>
+                {#if item.thumbnail_url}
+                  <img src={item.thumbnail_url} alt={item.title} loading="lazy" />
+                {:else}
+                  <div class="no-thumbnail">No Thumbnail</div>
+                {/if}
+                <div class="play-overlay">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
+                {#if item.duration_seconds}
+                  <span class="duration">{formatDuration(item.duration_seconds)}</span>
+                {/if}
+              </button>
+              <div class="mood-video-info">
+                <span class="mood-video-title" title={item.title}>{item.title}</span>
+                <span class="mood-video-channel">{item.channel_name}</span>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+  </div>
+
+  <div class="section-divider"></div>
+
   <!-- Platform Toggles -->
   <div class="platform-section">
+    <div class="section-header">
+      <h2>Search Across Platforms</h2>
+      <span class="section-subtitle">Search for new content across multiple video platforms</span>
+    </div>
     <div class="platform-header">
       <span class="platform-label">Platforms:</span>
       <button class="select-all-btn" onclick={selectAllPlatforms}>Select All</button>
@@ -461,6 +585,188 @@
   .subtitle {
     color: var(--color-text-secondary);
     margin: 0;
+  }
+
+  /* Section Headers */
+  .section-header {
+    margin-bottom: var(--spacing-md);
+  }
+
+  .section-header h2 {
+    font-size: 1.25rem;
+    margin: 0 0 var(--spacing-xs) 0;
+  }
+
+  .section-subtitle {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+  }
+
+  .section-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: var(--spacing-xl) 0;
+  }
+
+  /* Mood Section */
+  .mood-section {
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .mood-buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .mood-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-md);
+    background: var(--color-bg-secondary);
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+  }
+
+  .mood-btn:hover {
+    border-color: var(--color-primary);
+    transform: translateY(-2px);
+  }
+
+  .mood-btn.selected {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: white;
+  }
+
+  .mood-icon {
+    font-size: 2rem;
+  }
+
+  .mood-label {
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  .mood-desc {
+    font-size: 0.75rem;
+    opacity: 0.7;
+  }
+
+  .mood-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-xl);
+    color: var(--color-text-secondary);
+  }
+
+  .mood-error {
+    padding: var(--spacing-md);
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--color-error);
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+  }
+
+  .mood-results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-md);
+  }
+
+  .mood-count {
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+  }
+
+  .clear-mood-btn {
+    padding: var(--spacing-xs) var(--spacing-md);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
+  .clear-mood-btn:hover {
+    background: var(--color-bg);
+    border-color: var(--color-text-secondary);
+  }
+
+  .mood-video-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--spacing-md);
+  }
+
+  .mood-video-card {
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .mood-thumbnail {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    width: 100%;
+    background: var(--color-bg);
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: block;
+  }
+
+  .mood-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .mood-thumbnail .play-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.4);
+    color: white;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .mood-thumbnail:hover .play-overlay {
+    opacity: 1;
+  }
+
+  .mood-video-info {
+    padding: var(--spacing-sm);
+  }
+
+  .mood-video-title {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 0.85rem;
+    font-weight: 500;
+    line-height: 1.3;
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .mood-video-channel {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
   }
 
   /* Platform Section */
@@ -982,6 +1288,30 @@
 
   /* Mobile */
   @media (max-width: 768px) {
+    .mood-buttons {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .mood-btn {
+      padding: var(--spacing-sm);
+    }
+
+    .mood-icon {
+      font-size: 1.5rem;
+    }
+
+    .mood-label {
+      font-size: 0.85rem;
+    }
+
+    .mood-desc {
+      display: none;
+    }
+
+    .mood-video-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
     .search-bar {
       flex-direction: column;
     }
