@@ -1,0 +1,88 @@
+services:
+  # Traefik - Reverse Proxy & SSL
+  traefik:
+    image: traefik:v3.0
+    container_name: websearch-traefik
+    command:
+      - "--api.dashboard=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@refinedaf.com}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt-data:/letsencrypt
+    networks:
+      - websearch-network
+    restart: unless-stopped
+
+  # Meilisearch - Full-text search engine
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: websearch-meilisearch
+    environment:
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-TBmZdGLVexFLTf6Pl1_JZoQt1e07aBt6z-vIF4ldTF8}
+      - MEILI_ENV=production
+    volumes:
+      - meilisearch-data:/meili_data
+    networks:
+      - websearch-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --spider http://127.0.0.1:7700/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # WebSearch - Backend + Frontend
+  websearch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: websearch-app
+    env_file:
+      - .env
+    environment:
+      - WEBSEARCH_HOST=0.0.0.0
+      - WEBSEARCH_PORT=8000
+      - WEBSEARCH_DATA_DIR=/data
+      - WEBSEARCH_DEBUG=false
+      - WEBSEARCH_MEILISEARCH__HOST=http://meilisearch:7700
+      - WEBSEARCH_MEILISEARCH__API_KEY=${MEILI_MASTER_KEY:-TBmZdGLVexFLTf6Pl1_JZoQt1e07aBt6z-vIF4ldTF8}
+    volumes:
+      - websearch-data:/data
+    networks:
+      - websearch-network
+    depends_on:
+      meilisearch:
+        condition: service_healthy
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.websearch.rule=Host(`${DOMAIN:-refinedaf.com}`) || Host(`www.${DOMAIN:-refinedaf.com}`)"
+      - "traefik.http.routers.websearch.entrypoints=websecure"
+      - "traefik.http.routers.websearch.tls.certresolver=letsencrypt"
+      - "traefik.http.services.websearch.loadbalancer.server.port=8000"
+      # Redirect www to non-www
+      - "traefik.http.middlewares.websearch-redirect.redirectregex.regex=^https://www\\.(.+)"
+      - "traefik.http.middlewares.websearch-redirect.redirectregex.replacement=https://$${1}"
+      - "traefik.http.routers.websearch.middlewares=websearch-redirect"
+
+networks:
+  websearch-network:
+    driver: bridge
+
+volumes:
+  meilisearch-data:
+  websearch-data:
+  letsencrypt-data:

@@ -7,6 +7,7 @@
   import { goto } from '$app/navigation';
   import { themeStore } from '$lib/stores/theme.svelte';
   import { auth } from '$lib/stores/auth.svelte';
+  import { videoPlayer } from '$lib/stores/videoPlayer.svelte';
 
   let { children } = $props();
   let sidebarOpen = $state(false);
@@ -20,6 +21,11 @@
   // Initialize auth on mount
   $effect(() => {
     auth.init();
+  });
+
+  // Initialize media session for background playback controls
+  $effect(() => {
+    videoPlayer.initMediaSession();
   });
 
   // Auth guard - always redirect to login if not authenticated
