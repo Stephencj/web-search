@@ -1,7 +1,9 @@
-"""Channel search service for finding channels on YouTube and Rumble."""
+"""Channel search service for finding channels on YouTube, Rumble, and Podcasts."""
 
 import asyncio
+import hashlib
 import re
+import time
 from typing import Optional
 
 import httpx
@@ -9,6 +11,7 @@ import yt_dlp
 from loguru import logger
 
 from app.schemas.channel import ChannelSearchResult
+from app.config import get_settings
 
 
 async def search_youtube_channels(query: str, limit: int = 10) -> list[ChannelSearchResult]:
@@ -296,3 +299,176 @@ def _get_thumbnail(info: dict) -> Optional[str]:
         return sorted_thumbs[0].get('url')
 
     return None
+
+
+# ==================== PODCAST SEARCH ====================
+
+async def search_podcast_channels(query: str, limit: int = 10) -> list[ChannelSearchResult]:
+    """
+    Search for podcasts using Podcast Index API.
+
+    Args:
+        query: Search query
+        limit: Maximum results to return
+
+    Returns:
+        List of podcast search results
+    """
+    settings = get_settings()
+    api_key = settings.podcast_index.api_key
+    api_secret = settings.podcast_index.api_secret
+
+    if not api_key or not api_secret:
+        logger.warning("Podcast Index API credentials not configured, falling back to iTunes search")
+        return await _search_itunes_podcasts(query, limit)
+
+    try:
+        # Generate Podcast Index auth headers
+        epoch_time = str(int(time.time()))
+        data_to_hash = api_key + api_secret + epoch_time
+        sha1_hash = hashlib.sha1(data_to_hash.encode()).hexdigest()
+
+        headers = {
+            "X-Auth-Key": api_key,
+            "X-Auth-Date": epoch_time,
+            "Authorization": sha1_hash,
+            "User-Agent": "WebSearch/1.0 Podcast Client",
+        }
+
+        url = f"{settings.podcast_index.base_url}/search/byterm"
+        params = {"q": query, "max": limit}
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, params=params, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        for podcast in data.get("feeds", []):
+            try:
+                feed_url = podcast.get("url", "")
+                results.append(ChannelSearchResult(
+                    platform="podcast",
+                    channel_id=hashlib.md5(feed_url.encode()).hexdigest()[:16] if feed_url else str(podcast.get("id", "")),
+                    channel_url=feed_url,
+                    name=podcast.get("title", "Unknown Podcast"),
+                    description=podcast.get("description", ""),
+                    avatar_url=podcast.get("artwork") or podcast.get("image"),
+                    subscriber_count=None,
+                    video_count=podcast.get("episodeCount"),
+                ))
+            except Exception as e:
+                logger.debug(f"Failed to parse podcast result: {e}")
+                continue
+
+        return results
+
+    except Exception as e:
+        logger.error(f"Podcast Index search failed: {e}, falling back to iTunes")
+        return await _search_itunes_podcasts(query, limit)
+
+
+async def _search_itunes_podcasts(query: str, limit: int = 10) -> list[ChannelSearchResult]:
+    """
+    Search for podcasts using iTunes Search API as fallback.
+
+    Args:
+        query: Search query
+        limit: Maximum results to return
+
+    Returns:
+        List of podcast search results
+    """
+    try:
+        url = "https://itunes.apple.com/search"
+        params = {
+            "term": query,
+            "media": "podcast",
+            "entity": "podcast",
+            "limit": limit,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+        results = []
+        for podcast in data.get("results", []):
+            try:
+                feed_url = podcast.get("feedUrl", "")
+                if not feed_url:
+                    continue
+
+                results.append(ChannelSearchResult(
+                    platform="podcast",
+                    channel_id=hashlib.md5(feed_url.encode()).hexdigest()[:16],
+                    channel_url=feed_url,
+                    name=podcast.get("collectionName") or podcast.get("trackName", "Unknown Podcast"),
+                    description=podcast.get("description", ""),
+                    avatar_url=podcast.get("artworkUrl600") or podcast.get("artworkUrl100"),
+                    subscriber_count=None,
+                    video_count=podcast.get("trackCount"),
+                ))
+            except Exception as e:
+                logger.debug(f"Failed to parse iTunes podcast result: {e}")
+                continue
+
+        return results
+
+    except Exception as e:
+        logger.error(f"iTunes podcast search failed: {e}")
+        return []
+
+
+async def get_podcast_info_from_feed(feed_url: str) -> Optional[ChannelSearchResult]:
+    """
+    Get podcast info directly from RSS feed URL.
+
+    Args:
+        feed_url: Podcast RSS feed URL
+
+    Returns:
+        ChannelSearchResult or None if failed
+    """
+    try:
+        import feedparser
+
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            response = await client.get(
+                feed_url,
+                headers={"User-Agent": "WebSearch/1.0 Podcast Client"},
+            )
+            response.raise_for_status()
+            feed = feedparser.parse(response.text)
+
+        if not feed or not hasattr(feed, "feed"):
+            return None
+
+        podcast = feed.feed
+
+        # Get artwork
+        artwork = None
+        if hasattr(podcast, "image") and podcast.image:
+            artwork = getattr(podcast.image, "href", None)
+        if not artwork and hasattr(podcast, "itunes_image"):
+            itunes_img = podcast.itunes_image
+            if isinstance(itunes_img, dict):
+                artwork = itunes_img.get("href")
+
+        episode_count = len(feed.entries) if feed.entries else None
+
+        return ChannelSearchResult(
+            platform="podcast",
+            channel_id=hashlib.md5(feed_url.encode()).hexdigest()[:16],
+            channel_url=feed_url,
+            name=podcast.get("title", "Unknown Podcast"),
+            description=podcast.get("subtitle") or podcast.get("summary", ""),
+            avatar_url=artwork,
+            subscriber_count=None,
+            video_count=episode_count,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get podcast info from feed {feed_url}: {e}")
+        return None

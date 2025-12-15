@@ -27,7 +27,34 @@ class Platform(Enum):
     """Supported video platforms."""
     YOUTUBE = "youtube"
     RUMBLE = "rumble"
+    PODCAST = "podcast"
     UNKNOWN = "unknown"
+
+
+# Known podcast hosting domains
+PODCAST_HOSTS = {
+    "feeds.libsyn.com",
+    "feeds.megaphone.fm",
+    "feeds.simplecast.com",
+    "feeds.transistor.fm",
+    "feeds.buzzsprout.com",
+    "anchor.fm",
+    "feeds.soundcloud.com",
+    "feeds.podbean.com",
+    "rss.art19.com",
+    "feeds.acast.com",
+    "omnycontent.com",
+    "podcastfeeds.nbcnews.com",
+    "feeds.npr.org",
+    "audioboom.com",
+    "feed.podbean.com",
+    "rss.acast.com",
+    "podcasts.apple.com",
+    "feeds.fireside.fm",
+    "feeds.spreaker.com",
+    "feeds.captivate.fm",
+    "feeds.redcircle.com",
+}
 
 
 def is_youtube_url(url: str) -> bool:
@@ -225,6 +252,72 @@ def extract_rumble_channel_id(url: str) -> str | None:
         return None
 
 
+# ==================== PODCAST URL DETECTION ====================
+
+def is_podcast_url(url: str) -> bool:
+    """
+    Check if URL is a podcast RSS feed URL.
+
+    Args:
+        url: URL to check
+
+    Returns:
+        True if URL is a podcast RSS feed URL
+    """
+    try:
+        parsed = urlparse(url.lower())
+        path = parsed.path.lower()
+        host = parsed.netloc.lower()
+
+        # Check known podcast hosting domains
+        for podcast_host in PODCAST_HOSTS:
+            if podcast_host in host:
+                return True
+
+        # Check common RSS feed patterns
+        if any(ext in path for ext in [".rss", ".xml", "/feed", "/rss"]):
+            return True
+
+        # Check for feed query parameter
+        if "feed" in parsed.query.lower():
+            return True
+
+        return False
+    except Exception:
+        return False
+
+
+def extract_podcast_feed_url(url: str) -> str:
+    """
+    Normalize and extract podcast feed URL.
+
+    Args:
+        url: Podcast RSS feed URL
+
+    Returns:
+        Normalized feed URL
+    """
+    # For podcasts, the URL is the feed URL itself
+    # Just ensure it has a scheme
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+    return url
+
+
+def generate_podcast_channel_id(feed_url: str) -> str:
+    """
+    Generate a consistent channel ID from podcast feed URL.
+
+    Args:
+        feed_url: Podcast RSS feed URL
+
+    Returns:
+        Hash-based channel ID
+    """
+    import hashlib
+    return hashlib.md5(feed_url.encode()).hexdigest()[:16]
+
+
 # ==================== PLATFORM DETECTION ====================
 
 def detect_platform(url: str) -> Platform:
@@ -241,6 +334,8 @@ def detect_platform(url: str) -> Platform:
         return Platform.YOUTUBE
     if is_rumble_url(url):
         return Platform.RUMBLE
+    if is_podcast_url(url):
+        return Platform.PODCAST
     return Platform.UNKNOWN
 
 
@@ -301,5 +396,7 @@ def detect_channel_info(url: str) -> tuple[Platform, str | None]:
         return platform, extract_youtube_channel_id(url)
     elif platform == Platform.RUMBLE:
         return platform, extract_rumble_channel_id(url)
+    elif platform == Platform.PODCAST:
+        return platform, generate_podcast_channel_id(url)
     else:
         return platform, None

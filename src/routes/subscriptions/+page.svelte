@@ -16,7 +16,7 @@
 
   // Channel search
   let searchQuery = $state('');
-  let searchPlatform = $state<'youtube' | 'rumble'>('youtube');
+  let searchPlatform = $state<'youtube' | 'rumble' | 'podcast'>('youtube');
   let searchResults = $state<ChannelSearchResult[]>([]);
   let searching = $state(false);
   let searchError = $state<string | null>(null);
@@ -35,7 +35,7 @@
   let deleting = $state(false);
 
   // Filters
-  let platformFilter = $state<'all' | 'youtube' | 'rumble'>('all');
+  let platformFilter = $state<'all' | 'youtube' | 'rumble' | 'podcast'>('all');
 
   // YouTube account import
   let youtubeAccounts = $state<PlatformAccount[]>([]);
@@ -294,11 +294,17 @@
   }
 
   function getPlatformIcon(platform: string): string {
-    return platform === 'youtube' ? 'YT' : 'R';
+    if (platform === 'youtube') return 'YT';
+    if (platform === 'rumble') return 'R';
+    if (platform === 'podcast') return '🎙️';
+    return '?';
   }
 
   function getPlatformColor(platform: string): string {
-    return platform === 'youtube' ? '#ff0000' : '#85c742';
+    if (platform === 'youtube') return '#ff0000';
+    if (platform === 'rumble') return '#85c742';
+    if (platform === 'podcast') return '#8B5CF6';
+    return '#666666';
   }
 
   $effect(() => {
@@ -331,6 +337,7 @@
         <option value="all">All</option>
         <option value="youtube">YouTube</option>
         <option value="rumble">Rumble</option>
+        <option value="podcast">Podcast</option>
       </select>
     </div>
     <div class="channel-count">
@@ -387,12 +394,12 @@
           <div class="channel-info">
             <div class="channel-header">
               <h3 class="channel-name">{channel.display_name}</h3>
-              <span class="platform-badge" class:youtube={channel.platform === 'youtube'}>
+              <span class="platform-badge" class:youtube={channel.platform === 'youtube'} class:podcast={channel.platform === 'podcast'}>
                 {channel.platform}
               </span>
             </div>
             <div class="channel-meta">
-              <span>{channel.video_count} videos</span>
+              <span>{channel.video_count} {channel.platform === 'podcast' ? 'episodes' : 'videos'}</span>
               <span class="separator">|</span>
               <span>{channel.unwatched_count} unwatched</span>
               {#if channel.subscriber_count}
@@ -511,6 +518,7 @@
               <select class="select platform-select" bind:value={searchPlatform} onchange={() => { searchResults = []; if (searchQuery.trim()) searchChannels(); }}>
                 <option value="youtube">YouTube</option>
                 <option value="rumble">Rumble</option>
+                <option value="podcast">Podcast</option>
               </select>
               <div class="search-input-wrapper">
                 <input
@@ -542,8 +550,8 @@
                       {#if result.avatar_url}
                         <img src={result.avatar_url} alt={result.name} />
                       {:else}
-                        <div class="avatar-placeholder" style="background-color: {result.platform === 'youtube' ? '#ff0000' : '#85c742'}">
-                          {result.platform === 'youtube' ? 'YT' : 'R'}
+                        <div class="avatar-placeholder" style="background-color: {getPlatformColor(result.platform)}">
+                          {getPlatformIcon(result.platform)}
                         </div>
                       {/if}
                     </div>
@@ -554,7 +562,7 @@
                           <span>{formatSubscriberCount(result.subscriber_count)} subscribers</span>
                         {/if}
                         {#if result.video_count}
-                          <span>{result.video_count} videos</span>
+                          <span>{result.video_count} {result.platform === 'podcast' ? 'episodes' : 'videos'}</span>
                         {/if}
                       </div>
                     </div>
@@ -578,16 +586,16 @@
         {:else}
           <!-- URL Mode -->
           <div class="form-group">
-            <label for="channel-url">Channel URL</label>
+            <label for="channel-url">Channel or Feed URL</label>
             <input
               id="channel-url"
               type="url"
               class="input"
-              placeholder="https://www.youtube.com/@channel or https://rumble.com/c/channel"
+              placeholder="YouTube, Rumble channel URL or Podcast RSS feed"
               bind:value={newChannelUrl}
               onkeydown={(e) => e.key === 'Enter' && handleAddChannel()}
             />
-            <p class="form-hint">Supports YouTube and Rumble channel URLs</p>
+            <p class="form-hint">Supports YouTube, Rumble, and Podcast RSS feed URLs</p>
           </div>
         {/if}
 
@@ -998,6 +1006,10 @@
 
   .platform-badge.youtube {
     background: #ff0000;
+  }
+
+  .platform-badge.podcast {
+    background: #8B5CF6;
   }
 
   .channel-meta {
