@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api import indexes, sources, search, crawl, settings, collections, channels, feed, discover, saved_videos, playlists, accounts, stream, auth, users
+from app.api import indexes, sources, search, crawl, settings, collections, channels, feed, discover, saved_videos, playlists, accounts, stream, auth, users, hidden_channels
 
 api_router = APIRouter()
 
@@ -21,3 +21,4 @@ api_router.include_router(accounts.router, prefix="/accounts", tags=["accounts"]
 api_router.include_router(stream.router, prefix="/stream", tags=["stream"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(hidden_channels.router)

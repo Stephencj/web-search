@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { api, type PlatformInfo, type DiscoverVideoResult, type DiscoverChannelResult, type SearchTiming } from '$lib/api/client';
+  import { api, type PlatformInfo, type DiscoverVideoResult, type DiscoverChannelResult, type SearchTiming, type WatchStateItem } from '$lib/api/client';
   import { videoPlayer, discoverVideoToVideoItem, formatDuration } from '$lib/stores/videoPlayer.svelte';
+  import { hiddenChannelsStore } from '$lib/stores/hiddenChannels.svelte';
   import SaveButton from '$lib/components/SaveButton/SaveButton.svelte';
+  import HideButton from '$lib/components/HideButton/HideButton.svelte';
 
   // State
   let platforms = $state<PlatformInfo[]>([]);
@@ -20,6 +22,10 @@
   let savingVideo = $state<string | null>(null);
   let saveSuccess = $state<string | null>(null);
   let savedVideoIds = $state<Set<string>>(new Set());
+
+  // Watch state filter
+  let watchFilter = $state<'all' | 'unwatched'>('all');
+  let watchStates = $state<Map<string, WatchStateItem>>(new Map());
 
   // Pagination for infinite scroll
   let currentPage = $state(1);
@@ -43,9 +49,37 @@
   let selectedMood = $state<MoodType>(null);
   let lastSearchTerm = $state<string>('');
 
-  // Load platforms on mount
+  // Helper to get watch state for a video
+  function getWatchState(platform: string, videoId: string): WatchStateItem | undefined {
+    return watchStates.get(`${platform}:${videoId}`);
+  }
+
+  // Filtered results (excluding hidden channels and optionally watched videos)
+  let filteredVideoResults = $derived(
+    videoResults.filter(v => {
+      // Filter hidden channels
+      if (v.channel_id && hiddenChannelsStore.isHidden(v.platform, v.channel_id)) {
+        return false;
+      }
+      // Filter watched videos if filter is set to unwatched
+      if (watchFilter === 'unwatched') {
+        const state = getWatchState(v.platform, v.video_id);
+        // Hide fully watched videos, but keep partially watched
+        if (state?.is_watched) {
+          return false;
+        }
+      }
+      return true;
+    })
+  );
+  let filteredChannelResults = $derived(
+    channelResults.filter(c => !hiddenChannelsStore.isHidden(c.platform, c.channel_id))
+  );
+
+  // Load platforms and hidden channels on mount
   $effect(() => {
     loadPlatforms();
+    hiddenChannelsStore.load();
   });
 
   async function loadPlatforms() {
@@ -54,6 +88,26 @@
       platforms = response.platforms;
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load platforms';
+    }
+  }
+
+  async function loadWatchStates(videos: DiscoverVideoResult[]) {
+    if (videos.length === 0) return;
+
+    try {
+      const response = await api.checkWatchStates(
+        videos.map(v => ({ platform: v.platform, video_id: v.video_id }))
+      );
+
+      // Update watch states map
+      const newStates = new Map(watchStates);
+      for (const state of response.states) {
+        newStates.set(`${state.platform}:${state.video_id}`, state);
+      }
+      watchStates = newStates;
+    } catch (e) {
+      console.error('Failed to load watch states:', e);
+      // Non-critical error, don't show to user
     }
   }
 
@@ -128,9 +182,13 @@
           const newResults = response.results.filter(v => !existingIds.has(`${v.platform}:${v.video_id}`));
           videoResults = [...videoResults, ...newResults];
           hasMore = newResults.length >= maxPerPlatform / 2;
+          // Load watch states for new results
+          loadWatchStates(newResults);
         } else {
           videoResults = response.results;
           hasMore = response.results.length >= maxPerPlatform;
+          // Load watch states for all results
+          loadWatchStates(response.results);
         }
         timings = response.timings;
         totalDuration = response.total_duration_ms;
@@ -330,21 +388,41 @@
 
     <!-- Search Bar -->
     <div class="search-bar">
-      <div class="search-type-tabs">
-        <button
-          class="type-tab"
-          class:active={searchType === 'videos'}
-          onclick={() => searchType = 'videos'}
-        >
-          Videos
-        </button>
-        <button
-          class="type-tab"
-          class:active={searchType === 'channels'}
-          onclick={() => searchType = 'channels'}
-        >
-          Channels
-        </button>
+      <div class="search-filters-row">
+        <div class="search-type-tabs">
+          <button
+            class="type-tab"
+            class:active={searchType === 'videos'}
+            onclick={() => searchType = 'videos'}
+          >
+            Videos
+          </button>
+          <button
+            class="type-tab"
+            class:active={searchType === 'channels'}
+            onclick={() => searchType = 'channels'}
+          >
+            Channels
+          </button>
+        </div>
+        {#if searchType === 'videos'}
+          <div class="watch-filter-tabs">
+            <button
+              class="filter-tab"
+              class:active={watchFilter === 'all'}
+              onclick={() => watchFilter = 'all'}
+            >
+              All
+            </button>
+            <button
+              class="filter-tab"
+              class:active={watchFilter === 'unwatched'}
+              onclick={() => watchFilter = 'unwatched'}
+            >
+              Unwatched
+            </button>
+          </div>
+        {/if}
       </div>
       <input
         type="text"
@@ -412,7 +490,7 @@
         {/if}
       </div>
       <div class="video-grid">
-        {#each videoResults as video}
+        {#each filteredVideoResults as video}
           <div class="video-card">
             <div class="thumbnail">
               {#if video.thumbnail_url}
@@ -442,6 +520,26 @@
                 videoId={video.video_id}
                 onsaved={handleCollectionSaved}
               />
+              {#if video.channel_id}
+                <HideButton
+                  platform={video.platform}
+                  channelId={video.channel_id}
+                  channelName={video.channel_name || 'Unknown Channel'}
+                  channelAvatarUrl={video.channel_avatar_url}
+                />
+              {/if}
+              {#if getWatchState(video.platform, video.video_id)?.is_partially_watched}
+                {@const watchState = getWatchState(video.platform, video.video_id)}
+                {#if watchState?.watch_progress_seconds && watchState?.duration_seconds}
+                  <div class="watch-progress-bar">
+                    <div
+                      class="watch-progress-fill"
+                      style="width: {Math.min(100, (watchState.watch_progress_seconds / watchState.duration_seconds) * 100)}%"
+                    ></div>
+                  </div>
+                  <span class="partial-badge">In Progress</span>
+                {/if}
+              {/if}
             </div>
             <div class="video-info">
               <a href={video.video_url} target="_blank" rel="noopener noreferrer" class="video-title">
@@ -512,8 +610,14 @@
     {:else if searchType === 'channels' && channelResults.length > 0}
       <div class="results-count">{channelResults.length} channels found</div>
       <div class="channel-grid">
-        {#each channelResults as channel}
+        {#each filteredChannelResults as channel}
           <div class="channel-card">
+            <HideButton
+              platform={channel.platform}
+              channelId={channel.channel_id}
+              channelName={channel.name}
+              channelAvatarUrl={channel.avatar_url}
+            />
             <div class="channel-avatar">
               {#if channel.avatar_url}
                 <img src={channel.avatar_url} alt={channel.name} />
@@ -908,10 +1012,16 @@
     margin-bottom: var(--spacing-lg);
   }
 
+  .search-filters-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
+  }
+
   .search-type-tabs {
     display: flex;
     gap: var(--spacing-xs);
-    margin-bottom: var(--spacing-sm);
   }
 
   .type-tab {
@@ -926,6 +1036,33 @@
 
   .type-tab.active {
     background: var(--color-primary);
+    color: white;
+  }
+
+  .watch-filter-tabs {
+    display: flex;
+    gap: var(--spacing-xs);
+  }
+
+  .filter-tab {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+
+  .filter-tab:hover {
+    border-color: var(--color-primary);
+  }
+
+  .filter-tab.active {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
     color: white;
   }
 
@@ -1130,6 +1267,34 @@
     text-transform: uppercase;
   }
 
+  .watch-progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .watch-progress-fill {
+    height: 100%;
+    background: var(--color-primary);
+    transition: width 0.3s ease;
+  }
+
+  .partial-badge {
+    position: absolute;
+    bottom: var(--spacing-xs);
+    left: var(--spacing-xs);
+    background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.9);
+    color: white;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
   .video-info {
     padding: var(--spacing-md);
   }
@@ -1252,6 +1417,7 @@
   }
 
   .channel-card {
+    position: relative;
     display: flex;
     gap: var(--spacing-md);
     padding: var(--spacing-md);

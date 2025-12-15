@@ -44,6 +44,8 @@ class FeedSyncService:
                 result = await self._sync_rumble_channel(db, channel)
             elif channel.platform == "redbar":
                 result = await self._sync_redbar_channel(db, channel)
+            elif channel.platform == "podcast":
+                result = await self._sync_podcast_channel(db, channel)
             else:
                 result = {"success": False, "error": f"Unknown platform: {channel.platform}"}
 
@@ -401,6 +403,68 @@ class FeedSyncService:
 
         except Exception as e:
             logger.warning(f"Red Bar sync error for {channel.name}: {e}")
+            return {"success": False, "error": str(e), "new_videos": new_videos}
+
+    async def _sync_podcast_channel(
+        self,
+        db: AsyncSession,
+        channel: Channel,
+    ) -> dict:
+        """Sync a podcast channel using RSS feed via platform adapter."""
+        try:
+            from app.core.platforms.podcast import PodcastPlatform
+        except ImportError as e:
+            return {"success": False, "error": f"Podcast platform not available: {e}", "new_videos": 0}
+
+        new_videos = 0
+        skipped = 0
+
+        try:
+            adapter = PodcastPlatform()
+
+            # Get episodes since last sync (or last 90 days for new channels)
+            since = channel.last_synced_at or (datetime.utcnow() - timedelta(days=90))
+
+            # Get channel videos (episodes)
+            episodes = await adapter.get_channel_videos(
+                channel.channel_url,
+                max_results=50,
+                since=since,
+            )
+
+            for episode in episodes:
+                # Check if episode already exists
+                existing = await self._get_existing_feed_item(
+                    db, "podcast", episode.video_id
+                )
+                if existing:
+                    skipped += 1
+                    continue
+
+                # Create feed item
+                feed_item = FeedItem(
+                    channel_id=channel.id,
+                    platform="podcast",
+                    video_id=episode.video_id,
+                    video_url=episode.video_url,
+                    title=episode.title,
+                    description=episode.description,
+                    thumbnail_url=episode.thumbnail_url,
+                    duration_seconds=episode.duration_seconds,
+                    view_count=episode.view_count,
+                    upload_date=episode.upload_date or datetime.utcnow(),
+                )
+
+                db.add(feed_item)
+                new_videos += 1
+
+            await db.commit()
+
+            logger.info(f"Podcast sync complete for {channel.name}: {new_videos} new, {skipped} skipped")
+            return {"success": True, "new_videos": new_videos, "skipped": skipped}
+
+        except Exception as e:
+            logger.warning(f"Podcast sync error for {channel.name}: {e}")
             return {"success": False, "error": str(e), "new_videos": new_videos}
 
     async def _get_existing_feed_item(

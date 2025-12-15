@@ -10,6 +10,7 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 if TYPE_CHECKING:
+    from app.models.user_hidden_channel import UserHiddenChannel
     from app.models.user_session import UserSession
     from app.models.user_watch_state import UserWatchState
 
@@ -54,6 +55,9 @@ class User(Base):
     )
     watch_states: Mapped[list["UserWatchState"]] = relationship(
         "UserWatchState", back_populates="user", cascade="all, delete-orphan"
+    )
+    hidden_channels: Mapped[list["UserHiddenChannel"]] = relationship(
+        "UserHiddenChannel", back_populates="user", cascade="all, delete-orphan"
     )
 
     @property

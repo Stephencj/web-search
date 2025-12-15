@@ -15,6 +15,7 @@ from app.models.playlist import Playlist
 from app.models.platform_account import PlatformAccount
 from app.models.user import User
 from app.models.user_session import UserSession
+from app.models.user_hidden_channel import UserHiddenChannel
 from app.models.user_watch_state import UserWatchState
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     "Playlist",
     "PlatformAccount",
     "User",
+    "UserHiddenChannel",
     "UserSession",
     "UserWatchState",
 ]

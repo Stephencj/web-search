@@ -42,7 +42,7 @@
   const hasDirectStream = $derived(streamInfo?.stream_url && useDirectStream);
   const isPremium = $derived(streamInfo?.is_premium ?? false);
   const isYouTube = $derived(video?.platform === 'youtube');
-  const isAudio = $derived(video?.platform === 'redbar');
+  const isAudio = $derived(video?.platform === 'redbar' || video?.platform === 'podcast');
   const shouldUseYtApi = $derived(isYouTube && useYouTubeApi && canEmbed && !hasDirectStream);
   const videoKey = $derived(videoPlayer.videoKey);
   const savedPlayhead = $derived(videoPlayer.savedPlayhead);
