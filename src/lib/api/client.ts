@@ -188,7 +188,7 @@ export interface CollectionItemCreate {
 // Channel/Feed types
 export interface Channel {
   id: number;
-  platform: 'youtube' | 'rumble';
+  platform: 'youtube' | 'rumble' | 'podcast';
   platform_channel_id: string;
   channel_url: string;
   name: string;
@@ -211,7 +211,7 @@ export interface Channel {
 export interface FeedItem {
   id: number;
   channel_id: number;
-  platform: 'youtube' | 'rumble';
+  platform: 'youtube' | 'rumble' | 'podcast';
   video_id: string;
   video_url: string;
   title: string;
@@ -272,7 +272,7 @@ export interface SyncResult {
 }
 
 export interface ChannelSearchResult {
-  platform: 'youtube' | 'rumble';
+  platform: 'youtube' | 'rumble' | 'podcast';
   channel_id: string;
   channel_url: string;
   name: string;
@@ -959,7 +959,7 @@ class ApiClient {
 
   // Channels (Video Subscriptions)
   async listChannels(params?: {
-    platform?: 'youtube' | 'rumble';
+    platform?: 'youtube' | 'rumble' | 'podcast';
     is_active?: boolean;
   }): Promise<{ items: Channel[]; total: number }> {
     const searchParams = new URLSearchParams();
@@ -971,7 +971,7 @@ class ApiClient {
 
   async searchChannels(params: {
     query: string;
-    platform?: 'youtube' | 'rumble';
+    platform?: 'youtube' | 'rumble' | 'podcast';
     limit?: number;
   }): Promise<ChannelSearchResponse> {
     const searchParams = new URLSearchParams();
@@ -1032,7 +1032,7 @@ class ApiClient {
   // Feed (Video Feed)
   async getFeed(params?: {
     filter?: 'all' | 'unwatched' | 'watched';
-    platform?: 'youtube' | 'rumble';
+    platform?: 'youtube' | 'rumble' | 'podcast';
     channel_id?: number;
     page?: number;
     per_page?: number;
@@ -1061,7 +1061,7 @@ class ApiClient {
 
   async getFeedByChannel(params?: {
     filter?: 'all' | 'unwatched' | 'watched';
-    platform?: 'youtube' | 'rumble';
+    platform?: 'youtube' | 'rumble' | 'podcast';
   }): Promise<{ channels: ChannelGroupedFeed[]; total_channels: number; total_items: number }> {
     const searchParams = new URLSearchParams();
     if (params?.filter) searchParams.set('filter', params.filter);

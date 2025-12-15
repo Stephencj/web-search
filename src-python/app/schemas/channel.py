@@ -89,7 +89,7 @@ class SyncResult(BaseModel):
 
 class ChannelSearchResult(BaseModel):
     """A single channel search result."""
-    platform: Literal["youtube", "rumble"]
+    platform: Literal["youtube", "rumble", "podcast"]
     channel_id: str
     channel_url: str
     name: str

@@ -14,7 +14,9 @@ from app.core.crawler.url_detector import (
     detect_channel_info,
     is_youtube_url,
     is_rumble_url,
+    is_podcast_url,
     get_youtube_url_type,
+    extract_podcast_feed_url,
 )
 from app.core.crawler.youtube_types import YouTubeUrlType
 from app.models import Channel
@@ -346,6 +348,8 @@ class ChannelService:
             return await self._fetch_youtube_metadata(url)
         elif platform == Platform.RUMBLE:
             return await self._fetch_rumble_metadata(url)
+        elif platform == Platform.PODCAST:
+            return await self._fetch_podcast_metadata(url)
         return {}
 
     async def _fetch_youtube_metadata(self, url: str) -> dict:
@@ -463,6 +467,49 @@ class ChannelService:
             return int(num * 1_000_000_000)
         return int(num)
 
+    async def _fetch_podcast_metadata(self, url: str) -> dict:
+        """Fetch podcast metadata from RSS feed."""
+        try:
+            import feedparser
+            import httpx
+
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                response = await client.get(
+                    url,
+                    headers={"User-Agent": "WebSearch/1.0 Podcast Client"},
+                )
+                response.raise_for_status()
+                feed = feedparser.parse(response.text)
+
+            if not feed or not hasattr(feed, "feed"):
+                return {}
+
+            podcast = feed.feed
+
+            # Get artwork
+            artwork = None
+            if hasattr(podcast, "image") and podcast.image:
+                artwork = getattr(podcast.image, "href", None)
+            if not artwork and hasattr(podcast, "itunes_image"):
+                itunes_img = podcast.itunes_image
+                if isinstance(itunes_img, dict):
+                    artwork = itunes_img.get("href")
+
+            # Get episode count
+            episode_count = len(feed.entries) if feed.entries else None
+
+            return {
+                "name": podcast.get("title", "Unknown Podcast"),
+                "description": podcast.get("subtitle") or podcast.get("summary", ""),
+                "avatar_url": artwork,
+                "subscriber_count": None,  # Not available from RSS
+                "video_count": episode_count,
+            }
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch podcast metadata for {url}: {e}")
+            return {}
+
     def _normalize_channel_url(
         self,
         url: str,
@@ -477,6 +524,9 @@ class ChannelService:
             return f"https://www.youtube.com/@{channel_id}"
         elif platform == Platform.RUMBLE:
             return f"https://rumble.com/c/{channel_id}"
+        elif platform == Platform.PODCAST:
+            # For podcasts, the URL is the RSS feed URL itself
+            return extract_podcast_feed_url(url)
         return url
 
 

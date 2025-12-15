@@ -19,7 +19,11 @@ from app.schemas.channel import (
     ChannelSearchResponse,
 )
 from app.services.channel_service import get_channel_service
-from app.services.channel_search_service import search_youtube_channels, search_rumble_channels
+from app.services.channel_search_service import (
+    search_youtube_channels,
+    search_rumble_channels,
+    search_podcast_channels,
+)
 
 router = APIRouter()
 
@@ -69,25 +73,27 @@ async def list_channels(
 @router.get("/search", response_model=ChannelSearchResponse)
 async def search_channels(
     query: str = Query(..., min_length=2, description="Search query"),
-    platform: str = Query("youtube", description="Platform to search (youtube, rumble)"),
+    platform: str = Query("youtube", description="Platform to search (youtube, rumble, podcast)"),
     limit: int = Query(10, ge=1, le=50, description="Maximum results to return"),
 ) -> ChannelSearchResponse:
     """
-    Search for channels by name on YouTube or Rumble.
+    Search for channels by name on YouTube, Rumble, or Podcasts.
 
     This allows users to find and subscribe to channels without needing the exact URL.
     """
-    if platform not in ("youtube", "rumble"):
+    if platform not in ("youtube", "rumble", "podcast"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Platform must be 'youtube' or 'rumble'",
+            detail="Platform must be 'youtube', 'rumble', or 'podcast'",
         )
 
     try:
         if platform == "youtube":
             results = await search_youtube_channels(query, limit)
-        else:
+        elif platform == "rumble":
             results = await search_rumble_channels(query, limit)
+        else:
+            results = await search_podcast_channels(query, limit)
 
         return ChannelSearchResponse(
             query=query,

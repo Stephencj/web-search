@@ -28,7 +28,8 @@
 
   // Filters
   let filterStatus = $state<'all' | 'unwatched' | 'watched'>('unwatched');
-  let platformFilter = $state<'all' | 'youtube' | 'rumble'>('all');
+  let platformFilter = $state<'all' | 'youtube' | 'rumble' | 'podcast'>('all');
+  let searchFilter = $state('');
   let channelId = $state<number | null>(null);
 
   // Data
@@ -44,6 +45,17 @@
   let hasMore = $state(false);
   let totalItems = $state(0);
   const perPage = 24;
+
+  // Filtered feed items (client-side search)
+  let filteredFeedItems = $derived(
+    feedItems.filter(item => {
+      if (!searchFilter.trim()) return true;
+      const query = searchFilter.toLowerCase();
+      return item.title.toLowerCase().includes(query) ||
+             item.channel_name?.toLowerCase().includes(query) ||
+             item.description?.toLowerCase().includes(query);
+    })
+  );
 
   // Syncing
   let syncing = $state(false);
@@ -257,8 +269,8 @@
   }
 
   async function playVideo(item: FeedItem) {
-    // Find index of selected video in the current feed
-    const index = feedItems.findIndex(v => v.id === item.id);
+    // Find index of selected video in the filtered feed
+    const index = filteredFeedItems.findIndex(v => v.id === item.id);
 
     // Fetch fresh progress for the clicked video
     let freshItem = item;
@@ -268,9 +280,9 @@
       // Use cached data if fetch fails
     }
 
-    // Convert all feed items to VideoItems for the queue
+    // Convert filtered feed items to VideoItems for the queue
     // Use fresh data for the clicked item to ensure correct playhead
-    const queue = feedItems.map(v =>
+    const queue = filteredFeedItems.map(v =>
       v.id === item.id ? feedItemToVideoItem(freshItem) : feedItemToVideoItem(v)
     );
 
@@ -401,8 +413,21 @@
           <option value="all">All Platforms</option>
           <option value="youtube">YouTube</option>
           <option value="rumble">Rumble</option>
+          <option value="podcast">Podcast</option>
         </select>
       </div>
+    </div>
+
+    <div class="search-filter">
+      <input
+        type="text"
+        placeholder="Filter feed..."
+        bind:value={searchFilter}
+        class="filter-input"
+      />
+      {#if searchFilter}
+        <button class="clear-search" onclick={() => searchFilter = ''}>×</button>
+      {/if}
     </div>
 
     {#if channelId}
@@ -444,9 +469,20 @@
         </p>
         <a href="/subscriptions" class="btn btn-primary">Add Channels</a>
       </div>
+    {:else if filteredFeedItems.length === 0}
+      <div class="empty-state">
+        <div class="empty-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="64" height="64">
+            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+        </div>
+        <h2>No Matches</h2>
+        <p>No videos match your search "{searchFilter}"</p>
+        <button class="btn btn-secondary" onclick={() => searchFilter = ''}>Clear Search</button>
+      </div>
     {:else}
       <div class="video-grid">
-        {#each feedItems as item}
+        {#each filteredFeedItems as item}
           <div class="video-card" class:watched={item.is_watched}>
             <div class="thumbnail-wrapper">
               <button class="card-thumbnail" onclick={() => playVideo(item)}>
@@ -493,7 +529,7 @@
                 <span class="upload-date">{formatTimeAgo(item.upload_date)}</span>
               </div>
               <div class="card-actions">
-                <span class="platform-badge" class:youtube={item.platform === 'youtube'}>
+                <span class="platform-badge" class:youtube={item.platform === 'youtube'} class:podcast={item.platform === 'podcast'}>
                   {item.platform}
                 </span>
                 {#if item.is_watched}
@@ -722,6 +758,44 @@
     opacity: 0.9;
   }
 
+  .search-filter {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    position: relative;
+  }
+
+  .filter-input {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: 0.9rem;
+    min-width: 150px;
+  }
+
+  .filter-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+  }
+
+  .clear-search {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .clear-search:hover {
+    color: var(--color-text);
+  }
+
   .error-message {
     background: #fef2f2;
     color: var(--color-error);
@@ -937,6 +1011,10 @@
 
   .platform-badge.youtube {
     background: #ff0000;
+  }
+
+  .platform-badge.podcast {
+    background: #8B5CF6;
   }
 
   .action-btn-sm {
