@@ -16,7 +16,7 @@
 
   // Channel search
   let searchQuery = $state('');
-  let searchPlatform = $state<'youtube' | 'rumble' | 'podcast'>('youtube');
+  let searchPlatform = $state<string>('youtube');
   let searchResults = $state<ChannelSearchResult[]>([]);
   let searching = $state(false);
   let searchError = $state<string | null>(null);
@@ -35,7 +35,7 @@
   let deleting = $state(false);
 
   // Filters
-  let platformFilter = $state<'all' | 'youtube' | 'rumble' | 'podcast'>('all');
+  let platformFilter = $state<string>('all');
 
   // YouTube account import
   let youtubeAccounts = $state<PlatformAccount[]>([]);

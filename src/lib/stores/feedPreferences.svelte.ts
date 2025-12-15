@@ -8,11 +8,13 @@ import type { FeedMode } from '$lib/api/client';
 
 export type ViewMode = 'chronological' | 'by_channel';
 export type FilterStatus = 'all' | 'unwatched' | 'watched';
+export type PlatformFilter = string; // 'all' or platform id
 
 interface FeedPreferences {
   mode: FeedMode | null;
   viewMode: ViewMode;
   filterStatus: FilterStatus;
+  platformFilter: PlatformFilter;
 }
 
 const STORAGE_KEY = 'websearch-feed-preferences';
@@ -25,6 +27,7 @@ function getInitialPreferences(): FeedPreferences {
     mode: null,
     viewMode: 'chronological',
     filterStatus: 'unwatched',
+    platformFilter: 'all',
   };
 
   if (typeof window === 'undefined') return defaults;
@@ -83,6 +86,13 @@ function createFeedPreferencesStore() {
     },
 
     /**
+     * Get current platform filter
+     */
+    get platformFilter() {
+      return preferences.platformFilter;
+    },
+
+    /**
      * Get all preferences
      */
     get all() {
@@ -114,6 +124,14 @@ function createFeedPreferencesStore() {
     },
 
     /**
+     * Set platform filter
+     */
+    setPlatformFilter(platformFilter: PlatformFilter) {
+      preferences = { ...preferences, platformFilter };
+      savePreferences(preferences);
+    },
+
+    /**
      * Reset to defaults
      */
     reset() {
@@ -121,6 +139,7 @@ function createFeedPreferencesStore() {
         mode: null,
         viewMode: 'chronological',
         filterStatus: 'unwatched',
+        platformFilter: 'all',
       };
       savePreferences(preferences);
     },
