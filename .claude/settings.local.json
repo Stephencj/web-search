@@ -45,7 +45,8 @@
       "Bash(powershell -Command \"Start-Sleep -Seconds 90\")",
       "Bash(find:*)",
       "Bash(powershell -Command \"Start-Sleep -Seconds 20; docker logs websearch-app --tail 40 2>&1\")",
-      "WebFetch(domain:redbarradio.net)"
+      "WebFetch(domain:redbarradio.net)",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 5\")"
     ]
   }
 }

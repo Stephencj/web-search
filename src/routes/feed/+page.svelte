@@ -159,6 +159,12 @@
     try {
       const response = await api.listPlatforms();
       platforms = response.platforms;
+
+      // Validate saved platform filter exists, reset to 'all' if not
+      if (platformFilter !== 'all' && !platforms.find(p => p.id === platformFilter)) {
+        platformFilter = 'all';
+        feedPreferences.setPlatformFilter('all');
+      }
     } catch (e) {
       console.error('Failed to load platforms:', e);
     }
