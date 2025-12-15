@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { page } from '$app/stores';
   import { api, type PlatformInfo, type DiscoverVideoResult, type DiscoverChannelResult, type SearchTiming, type WatchStateItem } from '$lib/api/client';
   import { videoPlayer, discoverVideoToVideoItem, formatDuration } from '$lib/stores/videoPlayer.svelte';
   import { hiddenChannelsStore } from '$lib/stores/hiddenChannels.svelte';
@@ -86,6 +87,14 @@
     try {
       const response = await api.listPlatforms();
       platforms = response.platforms;
+
+      // Check for platform query parameter and pre-select it
+      const urlPlatform = $page.url.searchParams.get('platform');
+      if (urlPlatform && platforms.some(p => p.id === urlPlatform)) {
+        selectedPlatforms = new Set([urlPlatform]);
+        // Switch to channels tab for easier discovery
+        searchType = 'channels';
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load platforms';
     }
