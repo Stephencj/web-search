@@ -78,12 +78,13 @@ class ChannelService:
         else:
             metadata = await self._fetch_channel_metadata(url, platform)
 
-        # Create channel
+        # Create channel - ensure name is never None
+        channel_name = metadata.get("name") or channel_id
         channel = Channel(
             platform=platform.value,
             platform_channel_id=channel_id,
             channel_url=self._normalize_channel_url(url, platform, channel_id),
-            name=metadata.get("name", channel_id),
+            name=channel_name,
             description=metadata.get("description"),
             avatar_url=metadata.get("avatar_url"),
             banner_url=metadata.get("banner_url"),
@@ -394,37 +395,92 @@ class ChannelService:
             from bs4 import BeautifulSoup
 
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, timeout=30, follow_redirects=True)
+                response = await client.get(
+                    url,
+                    timeout=30,
+                    follow_redirects=True,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                )
                 if response.status_code != 200:
+                    logger.warning(f"Rumble returned status {response.status_code} for {url}")
                     return {}
 
                 soup = BeautifulSoup(response.text, 'lxml')
 
-                # Extract channel name
+                # Extract channel name - try multiple selectors
                 name = None
-                name_elem = soup.select_one('h1.channel-header--title')
-                if name_elem:
-                    name = name_elem.get_text(strip=True)
+                name_selectors = [
+                    'h1.channel-header--title',
+                    '.channel-header--title-wrapper h1',
+                    '.channel-header--title',
+                    '.channel-subheader--title',
+                    'h1',  # Fallback to any h1
+                    'meta[property="og:title"]',  # Try OpenGraph
+                    'title',  # Fallback to page title
+                ]
+                for selector in name_selectors:
+                    if selector.startswith('meta'):
+                        elem = soup.select_one(selector)
+                        if elem:
+                            name = elem.get('content', '').strip()
+                            if name:
+                                # Clean up "X on Rumble" format
+                                name = name.replace(' on Rumble', '').strip()
+                                break
+                    elif selector == 'title':
+                        elem = soup.select_one(selector)
+                        if elem:
+                            name = elem.get_text(strip=True)
+                            # Clean up title (remove "- Rumble" suffix)
+                            if name:
+                                name = name.replace(' - Rumble', '').strip()
+                                break
+                    else:
+                        elem = soup.select_one(selector)
+                        if elem:
+                            name = elem.get_text(strip=True)
+                            if name:
+                                break
 
-                # Try other selectors
-                if not name:
-                    name_elem = soup.select_one('.channel-header--title-wrapper h1')
-                    if name_elem:
-                        name = name_elem.get_text(strip=True)
-
-                # Extract avatar
+                # Extract avatar - try multiple selectors
                 avatar_url = None
-                avatar_elem = soup.select_one('.channel-header--thumb img')
-                if avatar_elem:
-                    avatar_url = avatar_elem.get('src')
+                avatar_selectors = [
+                    '.channel-header--thumb img',
+                    '.channel-header--image img',
+                    '.channel-subheader--thumb img',
+                    'img.channel-avatar',
+                    'meta[property="og:image"]',
+                ]
+                for selector in avatar_selectors:
+                    if selector.startswith('meta'):
+                        elem = soup.select_one(selector)
+                        if elem:
+                            avatar_url = elem.get('content')
+                            if avatar_url:
+                                break
+                    else:
+                        elem = soup.select_one(selector)
+                        if elem:
+                            avatar_url = elem.get('src')
+                            if avatar_url:
+                                break
 
-                # Extract subscriber count
+                # Extract subscriber count - try multiple selectors
                 subscriber_count = None
-                sub_elem = soup.select_one('.channel-header--followers')
-                if sub_elem:
-                    text = sub_elem.get_text(strip=True)
-                    subscriber_count = self._parse_subscriber_count(text)
+                sub_selectors = [
+                    '.channel-header--followers',
+                    '.channel-subheader--followers',
+                    '.subscribers',
+                ]
+                for selector in sub_selectors:
+                    elem = soup.select_one(selector)
+                    if elem:
+                        text = elem.get_text(strip=True)
+                        subscriber_count = self._parse_subscriber_count(text)
+                        if subscriber_count:
+                            break
 
+                logger.debug(f"Rumble metadata for {url}: name={name}, avatar={avatar_url is not None}")
                 return {
                     "name": name,
                     "avatar_url": avatar_url,
