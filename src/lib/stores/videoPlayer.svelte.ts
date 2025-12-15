@@ -5,6 +5,23 @@
 
 import { api, type FeedItem, type DiscoverVideoResult, type SavedVideo } from '$lib/api/client';
 import { buildEmbedConfig, type EmbedConfig } from '$lib/utils/embedUrl';
+import {
+  isMediaSessionSupported,
+  updateMediaMetadata,
+  updatePlaybackState,
+  updatePositionState,
+  registerMediaSessionHandlers,
+  unregisterMediaSessionHandlers,
+  clearMediaSession
+} from '$lib/utils/mediaSession';
+
+// Custom events for cross-component playback control
+export const PLAYER_EVENTS = {
+  PLAY: 'videoPlayer:play',
+  PAUSE: 'videoPlayer:pause',
+  SEEK: 'videoPlayer:seek',
+  SEEK_TO: 'videoPlayer:seekTo',
+} as const;
 
 export interface VideoItem {
   platform: string;
@@ -96,6 +113,66 @@ function createVideoPlayerStore() {
   let savedPlayhead = $state<number>(0);
   // Unique key to force player re-initialization on video change
   let videoKey = $state<number>(0);
+  // Global playback state
+  let isPlaying = $state<boolean>(false);
+  let currentTime = $state<number>(0);
+  let duration = $state<number>(0);
+  // Flag to indicate playback should continue after mode switch
+  let shouldResumePlayback = $state<boolean>(false);
+
+  // Helper to dispatch custom events for player control
+  function dispatchPlayerEvent(eventName: string, detail?: unknown) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(eventName, { detail }));
+    }
+  }
+
+  // Initialize media session handlers
+  function initMediaSession() {
+    if (!isMediaSessionSupported()) return;
+
+    registerMediaSessionHandlers({
+      onPlay: () => {
+        dispatchPlayerEvent(PLAYER_EVENTS.PLAY);
+      },
+      onPause: () => {
+        dispatchPlayerEvent(PLAYER_EVENTS.PAUSE);
+      },
+      onSeekBackward: (offset = 10) => {
+        dispatchPlayerEvent(PLAYER_EVENTS.SEEK, { offset: -offset });
+      },
+      onSeekForward: (offset = 10) => {
+        dispatchPlayerEvent(PLAYER_EVENTS.SEEK, { offset });
+      },
+      onSeekTo: (time) => {
+        dispatchPlayerEvent(PLAYER_EVENTS.SEEK_TO, { time });
+      },
+      onPreviousTrack: () => {
+        if (queue.length > 0 && currentIndex > 0) {
+          currentIndex--;
+          currentVideo = queue[currentIndex];
+          savedPlayhead = 0;
+          videoKey++;
+          shouldResumePlayback = true;
+        }
+      },
+      onNextTrack: () => {
+        if (queue.length > 0 && currentIndex < queue.length - 1) {
+          currentIndex++;
+          currentVideo = queue[currentIndex];
+          savedPlayhead = 0;
+          videoKey++;
+          shouldResumePlayback = true;
+        }
+      },
+      onStop: () => {
+        mode = 'closed';
+        currentVideo = null;
+        isPlaying = false;
+        clearMediaSession();
+      }
+    });
+  }
 
   return {
     get currentVideo() {
@@ -133,6 +210,88 @@ function createVideoPlayerStore() {
     },
     get videoKey() {
       return videoKey;
+    },
+    get isPlaying() {
+      return isPlaying;
+    },
+    get currentTime() {
+      return currentTime;
+    },
+    get duration() {
+      return duration;
+    },
+    get shouldResumePlayback() {
+      return shouldResumePlayback;
+    },
+
+    /**
+     * Initialize media session (call once on app mount)
+     */
+    initMediaSession,
+
+    /**
+     * Update playback state (called by active player)
+     */
+    setPlaybackState(playing: boolean) {
+      isPlaying = playing;
+      updatePlaybackState(playing ? 'playing' : 'paused');
+    },
+
+    /**
+     * Update current time and duration (called by active player)
+     */
+    updatePosition(time: number, dur: number) {
+      currentTime = time;
+      duration = dur;
+      if (dur > 0) {
+        updatePositionState(dur, time);
+      }
+    },
+
+    /**
+     * Update media session metadata when video changes
+     */
+    updateMediaMetadata() {
+      if (currentVideo) {
+        updateMediaMetadata(currentVideo);
+      }
+    },
+
+    /**
+     * Clear the shouldResumePlayback flag after player handles it
+     */
+    clearShouldResumePlayback() {
+      shouldResumePlayback = false;
+    },
+
+    /**
+     * Global play command - dispatches event for active player
+     */
+    play() {
+      dispatchPlayerEvent(PLAYER_EVENTS.PLAY);
+    },
+
+    /**
+     * Global pause command - dispatches event for active player
+     */
+    pause() {
+      dispatchPlayerEvent(PLAYER_EVENTS.PAUSE);
+    },
+
+    /**
+     * Global seek command - dispatches event for active player
+     * @param offset - seconds to seek (positive = forward, negative = backward)
+     */
+    seek(offset: number) {
+      dispatchPlayerEvent(PLAYER_EVENTS.SEEK, { offset });
+    },
+
+    /**
+     * Global seekTo command - dispatches event for active player
+     * @param time - absolute time in seconds
+     */
+    seekTo(time: number) {
+      dispatchPlayerEvent(PLAYER_EVENTS.SEEK_TO, { time });
     },
 
     /**
@@ -218,6 +377,8 @@ function createVideoPlayerStore() {
      */
     switchToPiP() {
       if (currentVideo) {
+        // Remember if video was playing so PiP can resume
+        shouldResumePlayback = isPlaying;
         mode = 'pip';
       }
     },
@@ -227,6 +388,8 @@ function createVideoPlayerStore() {
      */
     switchToModal() {
       if (currentVideo) {
+        // Remember if video was playing so modal can resume
+        shouldResumePlayback = isPlaying;
         mode = 'modal';
       }
     },
@@ -240,6 +403,11 @@ function createVideoPlayerStore() {
       queue = [];
       currentIndex = -1;
       savedPlayhead = 0;
+      isPlaying = false;
+      shouldResumePlayback = false;
+      currentTime = 0;
+      duration = 0;
+      clearMediaSession();
     },
 
     /**

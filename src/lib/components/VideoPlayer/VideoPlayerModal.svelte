@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { videoPlayer, formatDuration, getCachedStreamInfo, prefetchStreams, type StreamInfo } from '$lib/stores/videoPlayer.svelte';
+  import { videoPlayer, formatDuration, getCachedStreamInfo, prefetchStreams, type StreamInfo, PLAYER_EVENTS } from '$lib/stores/videoPlayer.svelte';
   import { playbackPreferences } from '$lib/stores/playbackPreferences.svelte';
   import { getPlatformName, getPlatformColor } from '$lib/utils/embedUrl';
-  import { loadYouTubeAPI, createYouTubePlayer, isYouTubeAPIReady, type YouTubePlayer } from '$lib/utils/youtubeApi';
+  import { loadYouTubeAPI, createYouTubePlayer, isYouTubeAPIReady, type YouTubePlayer, YT_PLAYER_STATE } from '$lib/utils/youtubeApi';
   import { api } from '$lib/api/client';
   import EmbedFallback from './EmbedFallback.svelte';
 
@@ -48,6 +48,63 @@
   const savedPlayhead = $derived(videoPlayer.savedPlayhead);
   const theaterMode = $derived(playbackPreferences.theaterMode);
   const backgroundPlayback = $derived(playbackPreferences.backgroundPlayback);
+  const shouldResumePlayback = $derived(videoPlayer.shouldResumePlayback);
+
+  /**
+   * Handle global play command from media session or other sources
+   */
+  function handleGlobalPlay() {
+    if (ytPlayer && ytPlayerReady) {
+      ytPlayer.playVideo();
+    } else if (videoElement && !videoElement.paused === false) {
+      videoElement.play().catch(() => {});
+    } else if (audioElement && audioElement.paused) {
+      audioElement.play().catch(() => {});
+    }
+  }
+
+  /**
+   * Handle global pause command
+   */
+  function handleGlobalPause() {
+    if (ytPlayer && ytPlayerReady) {
+      ytPlayer.pauseVideo();
+    } else if (videoElement && !videoElement.paused) {
+      videoElement.pause();
+    } else if (audioElement && !audioElement.paused) {
+      audioElement.pause();
+    }
+  }
+
+  /**
+   * Handle global seek command (relative)
+   */
+  function handleGlobalSeek(offset: number) {
+    const currentTime = getCurrentPlaybackTime();
+    const duration = getTotalDuration();
+    const newTime = Math.max(0, Math.min(currentTime + offset, duration));
+
+    if (ytPlayer && ytPlayerReady) {
+      ytPlayer.seekTo(newTime, true);
+    } else if (videoElement) {
+      videoElement.currentTime = newTime;
+    } else if (audioElement) {
+      audioElement.currentTime = newTime;
+    }
+  }
+
+  /**
+   * Handle global seekTo command (absolute)
+   */
+  function handleGlobalSeekTo(time: number) {
+    if (ytPlayer && ytPlayerReady) {
+      ytPlayer.seekTo(time, true);
+    } else if (videoElement) {
+      videoElement.currentTime = time;
+    } else if (audioElement) {
+      audioElement.currentTime = time;
+    }
+  }
 
   function handleClose() {
     // Save final progress before closing
@@ -355,6 +412,8 @@
         onReady: () => {
           ytPlayerReady = true;
           console.log('[Modal] YouTube player ready');
+          // Update media session metadata
+          videoPlayer.updateMediaMetadata();
           // Seek to saved position if any
           if (startTime > 0 && ytPlayer) {
             try {
@@ -363,8 +422,28 @@
               console.log('[Modal] Seeking to saved position:', startTime);
             } catch {}
           }
+          // Resume playback if switching from another mode that was playing
+          if (videoPlayer.shouldResumePlayback && ytPlayer) {
+            ytPlayer.playVideo();
+            videoPlayer.clearShouldResumePlayback();
+            console.log('[Modal] Resuming playback after mode switch');
+          }
           // Start progress tracking
           startProgressTracking();
+        },
+        onStateChange: (state) => {
+          // Report playback state to global store
+          if (state === YT_PLAYER_STATE.PLAYING) {
+            videoPlayer.setPlaybackState(true);
+          } else if (state === YT_PLAYER_STATE.PAUSED || state === YT_PLAYER_STATE.ENDED) {
+            videoPlayer.setPlaybackState(false);
+          }
+          // Update position periodically when playing
+          if (state === YT_PLAYER_STATE.PLAYING && ytPlayer) {
+            const time = ytPlayer.getCurrentTime();
+            const dur = ytPlayer.getDuration();
+            videoPlayer.updatePosition(time, dur);
+          }
         },
         onEnded: () => {
           console.log('[Modal] YouTube video ended');
@@ -439,6 +518,14 @@
         videoPlayer.clearSavedPlayhead();
         console.log('[Modal] Direct video seeking to:', startTime);
       }
+      // Update media metadata
+      videoPlayer.updateMediaMetadata();
+      // Resume playback if switching from another mode
+      if (videoPlayer.shouldResumePlayback) {
+        videoElement.play().catch(() => {});
+        videoPlayer.clearShouldResumePlayback();
+        console.log('[Modal] Resuming direct video after mode switch');
+      }
       // Start progress tracking for direct video
       startProgressTracking();
     }
@@ -452,6 +539,14 @@
         audioElement.currentTime = startTime;
         videoPlayer.clearSavedPlayhead();
         console.log('[Modal] Audio seeking to:', startTime);
+      }
+      // Update media metadata
+      videoPlayer.updateMediaMetadata();
+      // Resume playback if switching from another mode
+      if (videoPlayer.shouldResumePlayback) {
+        audioElement.play().catch(() => {});
+        videoPlayer.clearShouldResumePlayback();
+        console.log('[Modal] Resuming audio after mode switch');
       }
       // Start progress tracking for audio
       startProgressTracking();
@@ -468,6 +563,42 @@
         } catch {}
         ytPlayer = null;
       }
+    };
+  });
+
+  // Listen for global player control events from media session
+  $effect(() => {
+    if (!isOpen) return;
+
+    function handlePlay() {
+      handleGlobalPlay();
+    }
+    function handlePause() {
+      handleGlobalPause();
+    }
+    function handleSeek(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.offset !== undefined) {
+        handleGlobalSeek(detail.offset);
+      }
+    }
+    function handleSeekTo(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.time !== undefined) {
+        handleGlobalSeekTo(detail.time);
+      }
+    }
+
+    window.addEventListener(PLAYER_EVENTS.PLAY, handlePlay);
+    window.addEventListener(PLAYER_EVENTS.PAUSE, handlePause);
+    window.addEventListener(PLAYER_EVENTS.SEEK, handleSeek);
+    window.addEventListener(PLAYER_EVENTS.SEEK_TO, handleSeekTo);
+
+    return () => {
+      window.removeEventListener(PLAYER_EVENTS.PLAY, handlePlay);
+      window.removeEventListener(PLAYER_EVENTS.PAUSE, handlePause);
+      window.removeEventListener(PLAYER_EVENTS.SEEK, handleSeek);
+      window.removeEventListener(PLAYER_EVENTS.SEEK_TO, handleSeekTo);
     };
   });
 
@@ -628,13 +759,20 @@
                 controls
                 autoplay
                 onended={handleVideoEnded}
-                onplay={startProgressTracking}
+                onplay={() => {
+                  videoPlayer.setPlaybackState(true);
+                  startProgressTracking();
+                }}
                 onpause={() => {
+                  videoPlayer.setPlaybackState(false);
                   const currentTime = getCurrentPlaybackTime();
                   if (currentTime > 0) saveProgress(currentTime);
                 }}
                 ontimeupdate={() => {
-                  // Update duration display once loaded
+                  // Update position for media session
+                  if (audioElement) {
+                    videoPlayer.updatePosition(audioElement.currentTime, audioElement.duration || 0);
+                  }
                 }}
                 class="audio-element"
               >
@@ -663,6 +801,7 @@
                   audioElement.currentTime = videoElement?.currentTime || 0;
                   audioElement.play().catch(() => {});
                 }
+                videoPlayer.setPlaybackState(true);
                 startProgressTracking();
               }}
               onpause={() => {
@@ -670,8 +809,15 @@
                 if (audioElement) {
                   audioElement.pause();
                 }
+                videoPlayer.setPlaybackState(false);
                 const currentTime = getCurrentPlaybackTime();
                 if (currentTime > 0) saveProgress(currentTime);
+              }}
+              ontimeupdate={() => {
+                // Update position for media session
+                if (videoElement) {
+                  videoPlayer.updatePosition(videoElement.currentTime, videoElement.duration || 0);
+                }
               }}
               onseeked={() => {
                 // Sync audio when video seeks
