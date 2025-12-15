@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { api, type AppSettings, type CrawlerSettings, type ApiKey, type CrawlerSettingsUpdate } from '$lib/api/client';
+  import { api, type AppSettings, type CrawlerSettings, type ApiKey, type CrawlerSettingsUpdate, type HiddenChannel } from '$lib/api/client';
   import { themeStore, type Theme } from '$lib/stores/theme.svelte';
   import { playbackPreferences } from '$lib/stores/playbackPreferences.svelte';
+  import { hiddenChannelsStore } from '$lib/stores/hiddenChannels.svelte';
   import { ApiKeyModal, PlatformAccountCard } from '$lib/components/Settings';
 
   // Platform account types
@@ -53,6 +54,9 @@
   let fixingMetadata = $state(false);
   let metadataFixMessage = $state<string | null>(null);
 
+  // Hidden channels state
+  let unhidingChannel = $state<string | null>(null);
+
   // Theme options
   const themeOptions: { value: Theme; label: string; icon: string }[] = [
     { value: 'light', label: 'Light', icon: '☀️' },
@@ -70,6 +74,8 @@
 
   onMount(async () => {
     await loadData();
+    // Load hidden channels
+    hiddenChannelsStore.load();
 
     // Check for OAuth callback params
     const urlParams = new URLSearchParams(window.location.search);
@@ -329,6 +335,23 @@
   function getApiKeyForProvider(provider: string): ApiKey | undefined {
     return apiKeys.find(k => k.provider === provider);
   }
+
+  async function handleUnhideChannel(platform: string, channelId: string, channelName: string) {
+    const key = `${platform}:${channelId}`;
+    unhidingChannel = key;
+    try {
+      const success = await hiddenChannelsStore.unhide(platform, channelId);
+      if (success) {
+        saveMessage = { type: 'success', text: `Unhid ${channelName}` };
+        setTimeout(() => saveMessage = null, 3000);
+      }
+    } catch (e) {
+      saveMessage = { type: 'error', text: `Failed to unhide ${channelName}` };
+      setTimeout(() => saveMessage = null, 3000);
+    } finally {
+      unhidingChannel = null;
+    }
+  }
 </script>
 
 <div class="settings-page">
@@ -424,6 +447,46 @@
             <span class="toggle-slider"></span>
           </label>
         </div>
+      </section>
+
+      <!-- Hidden Channels -->
+      <section class="settings-section card">
+        <h2>Hidden Channels</h2>
+        <p class="section-description">Channels you've hidden from Discover results</p>
+
+        {#if hiddenChannelsStore.isLoading}
+          <div class="hidden-channels-loading">Loading hidden channels...</div>
+        {:else if hiddenChannelsStore.channels.length === 0}
+          <div class="hidden-channels-empty">
+            <p>No hidden channels</p>
+            <p class="hint">Hide channels from Discover to filter out content you don't want to see</p>
+          </div>
+        {:else}
+          <div class="hidden-channels-list">
+            {#each hiddenChannelsStore.channels as channel}
+              <div class="hidden-channel-item">
+                <div class="hidden-channel-avatar">
+                  {#if channel.channel_avatar_url}
+                    <img src={channel.channel_avatar_url} alt={channel.channel_name} />
+                  {:else}
+                    <div class="avatar-placeholder">{channel.channel_name.charAt(0).toUpperCase()}</div>
+                  {/if}
+                </div>
+                <div class="hidden-channel-info">
+                  <span class="hidden-channel-name">{channel.channel_name}</span>
+                  <span class="hidden-channel-platform">{channel.platform}</span>
+                </div>
+                <button
+                  class="btn btn-secondary btn-sm"
+                  onclick={() => handleUnhideChannel(channel.platform, channel.channel_id, channel.channel_name)}
+                  disabled={unhidingChannel === `${channel.platform}:${channel.channel_id}`}
+                >
+                  {unhidingChannel === `${channel.platform}:${channel.channel_id}` ? 'Unhiding...' : 'Unhide'}
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/if}
       </section>
 
       <!-- Linked Accounts -->
@@ -1054,6 +1117,84 @@
   .theme-label {
     font-size: 0.85rem;
     font-weight: 500;
+  }
+
+  /* Hidden Channels Section */
+  .hidden-channels-loading,
+  .hidden-channels-empty {
+    text-align: center;
+    padding: var(--spacing-lg);
+    color: var(--color-text-secondary);
+  }
+
+  .hidden-channels-empty .hint {
+    font-size: 0.85rem;
+    margin-top: var(--spacing-xs);
+    opacity: 0.7;
+  }
+
+  .hidden-channels-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+    margin-top: var(--spacing-md);
+  }
+
+  .hidden-channel-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+
+  .hidden-channel-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: var(--color-bg-secondary);
+  }
+
+  .hidden-channel-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+  }
+
+  .hidden-channel-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hidden-channel-name {
+    display: block;
+    font-weight: 500;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hidden-channel-platform {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    text-transform: capitalize;
   }
 
   /* Toggle Switch */

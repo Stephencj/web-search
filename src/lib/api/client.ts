@@ -428,6 +428,47 @@ export interface SavedVideoStats {
   by_platform: Record<string, number>;
 }
 
+// Hidden Channel types
+export interface HiddenChannel {
+  id: number;
+  platform: string;
+  channel_id: string;
+  channel_name: string;
+  channel_avatar_url: string | null;
+  hidden_at: string;
+}
+
+export interface HiddenChannelCreate {
+  platform: string;
+  channel_id: string;
+  channel_name: string;
+  channel_avatar_url?: string | null;
+}
+
+export interface HiddenChannelListResponse {
+  items: HiddenChannel[];
+  total: number;
+}
+
+// Watch State types for Discover
+export interface VideoIdentifier {
+  platform: string;
+  video_id: string;
+}
+
+export interface WatchStateItem {
+  platform: string;
+  video_id: string;
+  is_watched: boolean;
+  is_partially_watched: boolean;
+  watch_progress_seconds: number | null;
+  duration_seconds: number | null;
+}
+
+export interface WatchStateCheckResponse {
+  states: WatchStateItem[];
+}
+
 // Playlist types
 export interface FollowedPlaylist {
   id: number;
@@ -1287,6 +1328,32 @@ class ApiClient {
 
   async validateRedbarSession(): Promise<{ valid: boolean }> {
     return this.request('/accounts/redbar/validate', { method: 'POST' });
+  }
+
+  // Hidden Channels
+  async listHiddenChannels(): Promise<HiddenChannelListResponse> {
+    return this.request('/hidden-channels');
+  }
+
+  async hideChannel(data: HiddenChannelCreate): Promise<HiddenChannel> {
+    return this.request('/hidden-channels', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async unhideChannel(platform: string, channelId: string): Promise<void> {
+    return this.request(`/hidden-channels/${encodeURIComponent(platform)}/${encodeURIComponent(channelId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Watch States (for Discover filtering)
+  async checkWatchStates(videos: VideoIdentifier[]): Promise<WatchStateCheckResponse> {
+    return this.request('/discover/watch-states', {
+      method: 'POST',
+      body: JSON.stringify({ videos }),
+    });
   }
 }
 

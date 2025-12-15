@@ -160,6 +160,12 @@ class PlatformRegistry:
         except Exception as e:
             logger.warning(f"Failed to register Red Bar platform: {e}")
 
+        try:
+            from app.core.platforms.podcast import PodcastPlatform
+            cls.register(PodcastPlatform())
+        except Exception as e:
+            logger.warning(f"Failed to register Podcast platform: {e}")
+
         logger.info(f"Initialized {len(cls._adapters)} platform adapters")
 
 

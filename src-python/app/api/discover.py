@@ -1,8 +1,11 @@
 """Discovery API endpoints for federated video search."""
 
-from typing import Union
+from typing import Union, List
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
+from pydantic import BaseModel
+from sqlalchemy import select, and_
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.platforms import (
     PlatformRegistry,
@@ -26,6 +29,8 @@ from app.schemas.discover import (
     QuickSaveResponse,
 )
 from app.services.federated_search_service import get_federated_search_service
+from app.api.deps import DbSession, CurrentUserOrDefault
+from app.models import SavedVideo, FeedItem, UserWatchState
 
 router = APIRouter()
 
@@ -301,3 +306,114 @@ async def quick_save(request: QuickSaveRequest) -> QuickSaveResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch content: {str(e)}",
         )
+
+
+# Schemas for watch state check
+class VideoIdentifier(BaseModel):
+    """Identifies a video by platform and video_id."""
+    platform: str
+    video_id: str
+
+
+class WatchStateItem(BaseModel):
+    """Watch state for a single video."""
+    platform: str
+    video_id: str
+    is_watched: bool
+    is_partially_watched: bool
+    watch_progress_seconds: int | None
+    duration_seconds: int | None
+
+
+class WatchStateCheckRequest(BaseModel):
+    """Request to check watch states for multiple videos."""
+    videos: List[VideoIdentifier]
+
+
+class WatchStateCheckResponse(BaseModel):
+    """Response with watch states for requested videos."""
+    states: List[WatchStateItem]
+
+
+@router.post("/watch-states", response_model=WatchStateCheckResponse)
+async def check_watch_states(
+    request: WatchStateCheckRequest,
+    db: DbSession,
+    user: CurrentUserOrDefault,
+) -> WatchStateCheckResponse:
+    """
+    Check watch states for multiple videos.
+
+    Checks both SavedVideo and FeedItem tables to determine watch state.
+    Returns is_watched (fully watched) and is_partially_watched for each video.
+    """
+    states = []
+
+    for video in request.videos:
+        is_watched = False
+        is_partially_watched = False
+        watch_progress_seconds = None
+        duration_seconds = None
+
+        # Check SavedVideo first
+        saved_result = await db.execute(
+            select(SavedVideo).where(
+                and_(
+                    SavedVideo.user_id == user.id,
+                    SavedVideo.platform == video.platform,
+                    SavedVideo.video_id == video.video_id,
+                )
+            )
+        )
+        saved_video = saved_result.scalar_one_or_none()
+
+        if saved_video:
+            is_watched = saved_video.is_watched
+            watch_progress_seconds = saved_video.watch_progress_seconds
+            duration_seconds = saved_video.duration_seconds
+            # Partially watched if there's progress but not marked as watched
+            if not is_watched and watch_progress_seconds and watch_progress_seconds > 0:
+                is_partially_watched = True
+
+        # If not found in saved, check FeedItem with UserWatchState
+        if not saved_video:
+            # Find feed item by platform and video_id
+            feed_result = await db.execute(
+                select(FeedItem).where(
+                    and_(
+                        FeedItem.platform == video.platform,
+                        FeedItem.video_id == video.video_id,
+                    )
+                )
+            )
+            feed_item = feed_result.scalar_one_or_none()
+
+            if feed_item:
+                duration_seconds = feed_item.duration_seconds
+                # Check user's watch state for this feed item
+                watch_state_result = await db.execute(
+                    select(UserWatchState).where(
+                        and_(
+                            UserWatchState.user_id == user.id,
+                            UserWatchState.feed_item_id == feed_item.id,
+                        )
+                    )
+                )
+                watch_state = watch_state_result.scalar_one_or_none()
+
+                if watch_state:
+                    is_watched = watch_state.is_watched
+                    watch_progress_seconds = watch_state.watch_progress_seconds
+                    if not is_watched and watch_progress_seconds and watch_progress_seconds > 0:
+                        is_partially_watched = True
+
+        states.append(WatchStateItem(
+            platform=video.platform,
+            video_id=video.video_id,
+            is_watched=is_watched,
+            is_partially_watched=is_partially_watched,
+            watch_progress_seconds=watch_progress_seconds,
+            duration_seconds=duration_seconds,
+        ))
+
+    return WatchStateCheckResponse(states=states)

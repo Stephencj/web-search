@@ -58,6 +58,14 @@ class OAuthSettings(BaseSettings):
     token_refresh_buffer_seconds: int = 300  # Refresh 5 minutes before expiry
 
 
+class PodcastIndexSettings(BaseSettings):
+    """Podcast Index API settings for podcast discovery."""
+    # Get free API credentials at https://podcastindex.org/
+    api_key: Optional[str] = None
+    api_secret: Optional[str] = None
+    base_url: str = "https://api.podcastindex.org/api/1.0"
+
+
 class Settings(BaseSettings):
     """Main application settings."""
     model_config = SettingsConfigDict(
@@ -87,6 +95,7 @@ class Settings(BaseSettings):
     meilisearch: MeilisearchSettings = Field(default_factory=MeilisearchSettings)
     sync: SyncSettings = Field(default_factory=SyncSettings)
     oauth: OAuthSettings = Field(default_factory=OAuthSettings)
+    podcast_index: PodcastIndexSettings = Field(default_factory=PodcastIndexSettings)
 
     @property
     def sqlite_url(self) -> str:
