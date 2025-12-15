@@ -8,6 +8,7 @@
     type ChannelGroupedFeed,
     type FeedStats,
     type FeedMode,
+    type PlatformInfo,
   } from '$lib/api/client';
   import { videoPlayer, feedItemToVideoItem, formatDuration, openFeedVideo } from '$lib/stores/videoPlayer.svelte';
   import { feedPreferences } from '$lib/stores/feedPreferences.svelte';
@@ -28,9 +29,12 @@
 
   // Filters
   let filterStatus = $state<'all' | 'unwatched' | 'watched'>('unwatched');
-  let platformFilter = $state<'all' | 'youtube' | 'rumble' | 'podcast'>('all');
+  let platformFilter = $state<string>('all');
   let searchFilter = $state('');
   let channelId = $state<number | null>(null);
+
+  // Available platforms (loaded from API)
+  let platforms = $state<PlatformInfo[]>([]);
 
   // Data
   let feedItems = $state<FeedItem[]>([]);
@@ -66,12 +70,14 @@
     feedMode = feedPreferences.mode;
     viewMode = feedPreferences.viewMode;
     filterStatus = feedPreferences.filterStatus;
+    platformFilter = feedPreferences.platformFilter;
 
     // Check for channel_id in URL
     const urlChannelId = $page.url.searchParams.get('channel_id');
     if (urlChannelId) {
       channelId = parseInt(urlChannelId, 10);
     }
+    loadPlatforms();
     loadFeed();
     loadStats();
 
@@ -141,6 +147,31 @@
     filterStatus = newFilterStatus;
     feedPreferences.setFilterStatus(newFilterStatus);
     loadFeed();
+  }
+
+  function handlePlatformFilterChange(newPlatformFilter: string) {
+    platformFilter = newPlatformFilter;
+    feedPreferences.setPlatformFilter(newPlatformFilter);
+    loadFeed();
+  }
+
+  async function loadPlatforms() {
+    try {
+      const response = await api.listPlatforms();
+      platforms = response.platforms;
+    } catch (e) {
+      console.error('Failed to load platforms:', e);
+    }
+  }
+
+  function getPlatformColor(platformId: string): string {
+    const platform = platforms.find(p => p.id === platformId);
+    return platform?.color || '#6b7280';
+  }
+
+  function getPlatformIcon(platformId: string): string {
+    const platform = platforms.find(p => p.id === platformId);
+    return platform?.icon || '';
   }
 
   async function loadFeed() {
@@ -409,11 +440,17 @@
         </select>
       </div>
       <div class="filter-group">
-        <select bind:value={platformFilter} class="select">
+        <select
+          value={platformFilter}
+          onchange={(e) => handlePlatformFilterChange(e.currentTarget.value)}
+          class="select"
+        >
           <option value="all">All Platforms</option>
-          <option value="youtube">YouTube</option>
-          <option value="rumble">Rumble</option>
-          <option value="podcast">Podcast</option>
+          {#each platforms as platform}
+            <option value={platform.id}>
+              {platform.icon} {platform.name}
+            </option>
+          {/each}
         </select>
       </div>
     </div>
@@ -529,8 +566,8 @@
                 <span class="upload-date">{formatTimeAgo(item.upload_date)}</span>
               </div>
               <div class="card-actions">
-                <span class="platform-badge" class:youtube={item.platform === 'youtube'} class:podcast={item.platform === 'podcast'}>
-                  {item.platform}
+                <span class="platform-badge" style="background: {getPlatformColor(item.platform)}">
+                  {getPlatformIcon(item.platform)} {item.platform}
                 </span>
                 {#if item.is_watched}
                   <button
@@ -1009,13 +1046,7 @@
     font-weight: 600;
   }
 
-  .platform-badge.youtube {
-    background: #ff0000;
-  }
-
-  .platform-badge.podcast {
-    background: #8B5CF6;
-  }
+  /* Platform badge colors are now set via inline styles from API data */
 
   .action-btn-sm {
     background: var(--color-bg);
