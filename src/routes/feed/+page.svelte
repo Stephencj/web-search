@@ -502,7 +502,10 @@
         </div>
         <h2>No Videos Found</h2>
         <p>
-          {#if filterStatus === 'unwatched'}
+          {#if platformFilter !== 'all'}
+            {@const platformName = platforms.find(p => p.id === platformFilter)?.name || platformFilter}
+            No {filterStatus === 'unwatched' ? 'unwatched ' : filterStatus === 'watched' ? 'watched ' : ''}{platformName} videos in your feed.
+          {:else if filterStatus === 'unwatched'}
             You're all caught up! No unwatched videos.
           {:else if filterStatus === 'watched'}
             No watched videos yet.
@@ -510,7 +513,13 @@
             No videos in your feed. Add some channels to get started.
           {/if}
         </p>
-        <a href="/subscriptions" class="btn btn-primary">Add Channels</a>
+        {#if platformFilter !== 'all'}
+          <a href="/discover?platform={platformFilter}" class="btn btn-primary">
+            Find {platforms.find(p => p.id === platformFilter)?.name || platformFilter} Channels
+          </a>
+        {:else}
+          <a href="/discover" class="btn btn-primary">Add Channels</a>
+        {/if}
       </div>
     {:else if filteredFeedItems.length === 0}
       <div class="empty-state">
