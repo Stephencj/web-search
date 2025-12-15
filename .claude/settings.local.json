@@ -46,7 +46,13 @@
       "Bash(find:*)",
       "Bash(powershell -Command \"Start-Sleep -Seconds 20; docker logs websearch-app --tail 40 2>&1\")",
       "WebFetch(domain:redbarradio.net)",
-      "Bash(powershell -Command \"Start-Sleep -Seconds 5\")"
+      "Bash(powershell -Command \"Start-Sleep -Seconds 5\")",
+      "Bash(grep:*)",
+      "Bash(xargs:*)",
+      "Bash(copy \"C:\\Users\\steph\\documents\\web-search\\static\\favicon.png\" \"C:\\Users\\steph\\documents\\web-search\\static\\icons\\icon-192.png\")",
+      "Bash(cmd /c \"copy \"\"C:\\Users\\steph\\documents\\web-search\\static\\favicon.png\"\" \"\"C:\\Users\\steph\\documents\\web-search\\static\\icons\\icon-192.png\"\"\")",
+      "Bash(powershell:*)",
+      "Bash(npx svelte-check:*)"
     ]
   }
 }
