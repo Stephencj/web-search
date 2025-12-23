@@ -1,5 +1,6 @@
 <script lang="ts">
   import { videoPlayer, formatDuration, getCachedStreamInfo, prefetchStreams, type StreamInfo, PLAYER_EVENTS } from '$lib/stores/videoPlayer.svelte';
+  import { watchProgress } from '$lib/stores/watchProgress.svelte';
   import { getPlatformName, getPlatformColor } from '$lib/utils/embedUrl';
   import { loadYouTubeAPI, createYouTubePlayer, type YouTubePlayer, YT_PLAYER_STATE } from '$lib/utils/youtubeApi';
   import { api } from '$lib/api/client';
@@ -7,8 +8,11 @@
 
   // Progress tracking
   let progressInterval: ReturnType<typeof setInterval> | null = null;
+  let localSaveInterval: ReturnType<typeof setInterval> | null = null;
   let lastSavedProgress = 0;
-  const PROGRESS_SAVE_INTERVAL = 15000; // Save every 15 seconds
+  let lastLocalSaveProgress = 0;
+  const PROGRESS_SAVE_INTERVAL = 15000; // Save to API every 15 seconds
+  const LOCAL_SAVE_INTERVAL = 3000; // Save to localStorage every 3 seconds
   const WATCHED_THRESHOLD = 0.90; // Mark as watched at 90% completion
 
   // Dragging state
@@ -132,6 +136,7 @@
     useDirectStream = false;
     position = { x: 0, y: 0 };
     lastSavedProgress = 0;
+    lastLocalSaveProgress = 0;
   }
 
   async function fetchStreamInfo() {
@@ -211,11 +216,26 @@
   }
 
   /**
-   * Save progress to the API
+   * Save progress to localStorage (fast, immediate)
+   */
+  function saveProgressLocal(currentTime: number) {
+    if (!video || !video.sourceId || video.sourceType === 'discover') return;
+    if (Math.abs(currentTime - lastLocalSaveProgress) < 2) return;
+
+    const sourceType = video.sourceType as 'feed' | 'saved';
+    watchProgress.save(sourceType, video.sourceId, Math.floor(currentTime));
+    lastLocalSaveProgress = currentTime;
+  }
+
+  /**
+   * Save progress to the API (slower, for server sync)
    */
   async function saveProgress(currentTime: number) {
     if (!video || !video.sourceId || video.sourceType === 'discover') return;
     if (Math.abs(currentTime - lastSavedProgress) < 5) return;
+
+    // Always save locally first for immediate persistence
+    saveProgressLocal(currentTime);
 
     try {
       if (video.sourceType === 'feed') {
@@ -224,9 +244,10 @@
         await api.updateSavedVideoProgress(video.sourceId, Math.floor(currentTime));
       }
       lastSavedProgress = currentTime;
+      watchProgress.markSynced(video.sourceType as 'feed' | 'saved', video.sourceId);
       console.log('[PiP] Progress saved:', Math.floor(currentTime), 'seconds');
     } catch (e) {
-      console.warn('[PiP] Failed to save progress:', e);
+      console.warn('[PiP] Failed to save progress to API:', e);
     }
   }
 
@@ -242,6 +263,7 @@
       } else if (video.sourceType === 'saved') {
         await api.markSavedVideoWatched(video.sourceId, Math.floor(finalProgress));
       }
+      watchProgress.clear(video.sourceType as 'feed' | 'saved', video.sourceId);
       console.log('[PiP] Marked as watched');
     } catch (e) {
       console.warn('[PiP] Failed to mark as watched:', e);
@@ -265,11 +287,20 @@
    */
   function startProgressTracking() {
     stopProgressTracking();
+
+    // Fast local save every 3 seconds
+    localSaveInterval = setInterval(() => {
+      const currentTime = getCurrentPlaybackTime();
+      saveProgressLocal(currentTime);
+    }, LOCAL_SAVE_INTERVAL);
+
+    // API save every 15 seconds
     progressInterval = setInterval(() => {
       const currentTime = getCurrentPlaybackTime();
       saveProgress(currentTime);
       checkWatchedThreshold();
     }, PROGRESS_SAVE_INTERVAL);
+
     console.log('[PiP] Progress tracking started');
   }
 
@@ -277,6 +308,10 @@
    * Stop progress tracking
    */
   function stopProgressTracking() {
+    if (localSaveInterval) {
+      clearInterval(localSaveInterval);
+      localSaveInterval = null;
+    }
     if (progressInterval) {
       clearInterval(progressInterval);
       progressInterval = null;
@@ -290,6 +325,20 @@
     if (savedPlayhead > 0) {
       return savedPlayhead;
     }
+
+    // Get progress from both local storage and API, use higher value
+    if (video?.sourceId && video.sourceType && video.sourceType !== 'discover') {
+      const effectiveProgress = watchProgress.getEffective(
+        video.sourceType as 'feed' | 'saved',
+        video.sourceId,
+        video.watchProgress
+      );
+      if (effectiveProgress && effectiveProgress > 0) {
+        console.log('[PiP] Resuming from progress:', effectiveProgress, 'seconds');
+        return effectiveProgress;
+      }
+    }
+
     if (video?.watchProgress && video.watchProgress > 0) {
       return video.watchProgress;
     }
@@ -467,10 +516,37 @@
       useDirectStream = false;
       ytPlayerReady = false;
       lastSavedProgress = 0;
+      lastLocalSaveProgress = 0;
       stopProgressTracking();
       // Fetch stream info for direct playback
       fetchStreamInfo();
     }
+  });
+
+  // Save progress on page unload or tab visibility change
+  $effect(() => {
+    if (!isOpen) return;
+
+    function saveProgressOnExit() {
+      const currentTime = getCurrentPlaybackTime();
+      if (currentTime > 0) {
+        saveProgressLocal(currentTime);
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        saveProgressOnExit();
+      }
+    }
+
+    window.addEventListener('beforeunload', saveProgressOnExit);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', saveProgressOnExit);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   });
 
   // Initialize YouTube API player for YouTube videos
@@ -689,8 +765,10 @@
           <iframe
             src={embedUrl}
             title={video.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
             allowfullscreen
+            referrerpolicy="no-referrer-when-downgrade"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation"
             onload={handleIframeLoad}
             onerror={handleIframeError}
             class:loaded={iframeLoaded}
