@@ -5,6 +5,7 @@
   import { hiddenChannelsStore } from '$lib/stores/hiddenChannels.svelte';
   import SaveButton from '$lib/components/SaveButton/SaveButton.svelte';
   import HideButton from '$lib/components/HideButton/HideButton.svelte';
+  import DownloadButton from '$lib/components/DownloadButton.svelte';
 
   // State
   let platforms = $state<PlatformInfo[]>([]);
@@ -529,6 +530,15 @@
                 videoId={video.video_id}
                 onsaved={handleCollectionSaved}
               />
+              <div class="download-btn">
+                <DownloadButton
+                  platform={video.platform}
+                  videoId={video.video_id}
+                  title={video.title}
+                  thumbnailUrl={video.thumbnail_url}
+                  size="sm"
+                />
+              </div>
               {#if video.channel_id}
                 <HideButton
                   platform={video.platform}
@@ -1274,6 +1284,26 @@
     font-size: 0.7rem;
     font-weight: 600;
     text-transform: uppercase;
+  }
+
+  .download-btn {
+    position: absolute;
+    top: var(--spacing-xs);
+    right: 44px;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .thumbnail:hover .download-btn,
+  .video-card:hover .download-btn {
+    opacity: 1;
+  }
+
+  @media (max-width: 768px) {
+    .download-btn {
+      opacity: 1;
+    }
   }
 
   .watch-progress-bar {

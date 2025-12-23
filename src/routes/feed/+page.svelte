@@ -14,6 +14,7 @@
   import { feedPreferences } from '$lib/stores/feedPreferences.svelte';
   import FeedModeSelector from '$lib/components/FeedModeSelector/FeedModeSelector.svelte';
   import SaveButton from '$lib/components/SaveButton/SaveButton.svelte';
+  import DownloadButton from '$lib/components/DownloadButton.svelte';
 
   // Auto-refresh settings
   const AUTO_REFRESH_INTERVAL = 30000; // 30 seconds
@@ -569,6 +570,15 @@
                 embedType={item.platform}
                 videoId={item.video_id}
               />
+              <div class="download-btn">
+                <DownloadButton
+                  platform={item.platform}
+                  videoId={item.video_id}
+                  title={item.title}
+                  thumbnailUrl={item.thumbnail_url}
+                  size="sm"
+                />
+              </div>
             </div>
             <div class="card-content">
               <h3 class="video-title" title={item.title}>{item.title}</h3>
@@ -936,6 +946,26 @@
     top: 8px;
     right: 8px;
     z-index: 10;
+  }
+
+  .download-btn {
+    position: absolute;
+    top: 8px;
+    right: 44px;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .thumbnail-wrapper:hover .download-btn,
+  .video-card:hover .download-btn {
+    opacity: 1;
+  }
+
+  @media (max-width: 768px) {
+    .download-btn {
+      opacity: 1;
+    }
   }
 
   .card-thumbnail {

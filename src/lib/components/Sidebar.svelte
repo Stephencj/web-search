@@ -25,6 +25,7 @@
     { href: '/saved', label: 'Saved', icon: '💾' },
     { href: '/collections', label: 'Collections', icon: '📁' },
     { href: '/history', label: 'History', icon: '⏱️' },
+    { href: '/downloads', label: 'Downloads', icon: '📥' },
     { href: '/crawler', label: 'Web Crawler', icon: '🕷️' },
     { href: '/settings', label: 'Settings', icon: '⚙️' },
   ];

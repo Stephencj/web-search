@@ -100,7 +100,28 @@
 	 * Fetch stream info for the current video
 	 */
 	async function loadStreamInfo() {
-		if (!video || video.platform !== 'youtube') return;
+		if (!video) return;
+
+		// Handle offline videos - use the pre-loaded blob URL
+		if (video.isOffline && video.offlineStreamUrl) {
+			streamInfo = {
+				video_id: video.videoId,
+				platform: video.platform,
+				title: video.title,
+				stream_url: video.offlineStreamUrl,
+				audio_url: video.contentType === 'audio' ? video.offlineStreamUrl : undefined,
+				thumbnail_url: video.thumbnailUrl ?? undefined,
+				duration_seconds: video.duration ?? undefined,
+				is_authenticated: false,
+				is_premium: false,
+				quality: 'offline',
+			};
+			useDirectStream = true;
+			return;
+		}
+
+		// Only fetch streams for YouTube currently
+		if (video.platform !== 'youtube') return;
 
 		// Check cache first
 		const cached = streamCache.getSync(video.platform, video.videoId);
