@@ -40,7 +40,7 @@
 			if (preferredStrategy === 'direct_stream' && streamInfo?.stream_url) {
 				return 'direct_stream';
 			}
-			if (preferredStrategy === 'audio' && (video.platform === 'redbar' || video.platform === 'podcast')) {
+			if (preferredStrategy === 'audio' && (video.contentType === 'audio' || video.platform === 'redbar' || video.platform === 'podcast')) {
 				return 'audio';
 			}
 			if (preferredStrategy === 'youtube_api' && video.platform === 'youtube') {
@@ -55,7 +55,7 @@
 		return getBestStrategy(video, !!streamInfo?.stream_url);
 	});
 
-	const isAudio = $derived(video.platform === 'redbar' || video.platform === 'podcast');
+	const isAudio = $derived(video.contentType === 'audio' || video.platform === 'redbar' || video.platform === 'podcast');
 	const hasDirectStream = $derived(!!streamInfo?.stream_url);
 	const canEmbed = $derived(video.embedConfig.supportsEmbed);
 </script>

@@ -42,8 +42,8 @@ export type StrategyType = 'embed' | 'youtube_api' | 'direct_stream' | 'audio';
  * Get the best strategy for a video
  */
 export function getBestStrategy(video: VideoItem, hasStreamInfo: boolean): StrategyType {
-	// Audio content
-	if (video.platform === 'redbar' || video.platform === 'podcast') {
+	// Audio content (podcast, audio-only items)
+	if (video.contentType === 'audio' || video.platform === 'redbar' || video.platform === 'podcast') {
 		return 'audio';
 	}
 
