@@ -62,6 +62,7 @@
     if (pathname.startsWith('/saved')) return 'Saved';
     if (pathname.startsWith('/collections')) return 'Collections';
     if (pathname.startsWith('/history')) return 'History';
+    if (pathname.startsWith('/downloads')) return 'Downloads';
     if (pathname.startsWith('/crawler')) return 'Web Crawler';
     if (pathname.startsWith('/indexes')) return 'Indexes';
     if (pathname.startsWith('/settings')) return 'Settings';

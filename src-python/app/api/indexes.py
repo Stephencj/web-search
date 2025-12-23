@@ -1,5 +1,7 @@
 """Index management API endpoints."""
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -12,11 +14,12 @@ from app.schemas.index import (
     IndexResponse,
     IndexListResponse,
 )
+from app.core.search import get_meilisearch_client
 
 router = APIRouter()
 
 
-def _index_to_response(index: Index) -> IndexResponse:
+def _index_to_response(index: Index, document_count: int = 0) -> IndexResponse:
     """Convert Index model to response schema."""
     # Ensure ranking_config is never None
     ranking_config = index.ranking_config or {
@@ -34,8 +37,18 @@ def _index_to_response(index: Index) -> IndexResponse:
         created_at=index.created_at,
         updated_at=index.updated_at,
         source_count=len(index.sources) if index.sources else 0,
-        document_count=0,  # TODO: Get from Meilisearch
+        document_count=document_count,
     )
+
+
+async def _get_document_count(slug: str) -> int:
+    """Get document count from Meilisearch for an index."""
+    try:
+        meili = get_meilisearch_client()
+        stats = await meili.get_stats(slug)
+        return stats.get("document_count", 0)
+    except Exception:
+        return 0
 
 
 @router.get("", response_model=IndexListResponse)
@@ -46,8 +59,11 @@ async def list_indexes(db: DbSession) -> IndexListResponse:
     )
     indexes = result.scalars().all()
 
+    # Fetch document counts from Meilisearch in parallel
+    counts = await asyncio.gather(*[_get_document_count(idx.slug) for idx in indexes])
+
     return IndexListResponse(
-        items=[_index_to_response(idx) for idx in indexes],
+        items=[_index_to_response(idx, count) for idx, count in zip(indexes, counts)],
         total=len(indexes)
     )
 
@@ -92,7 +108,8 @@ async def get_index(index_id: int, db: DbSession) -> IndexResponse:
             detail=f"Index with id {index_id} not found"
         )
 
-    return _index_to_response(index)
+    document_count = await _get_document_count(index.slug)
+    return _index_to_response(index, document_count)
 
 
 @router.put("/{index_id}", response_model=IndexResponse)
@@ -159,6 +176,7 @@ async def get_index_stats(index_id: int, db: DbSession) -> dict:
     # Calculate stats
     total_pages = sum(s.page_count for s in index.sources)
     active_sources = sum(1 for s in index.sources if s.is_active)
+    document_count = await _get_document_count(index.slug)
 
     return {
         "index_id": index.id,
@@ -166,5 +184,5 @@ async def get_index_stats(index_id: int, db: DbSession) -> dict:
         "source_count": len(index.sources),
         "active_sources": active_sources,
         "total_pages": total_pages,
-        "document_count": 0,  # TODO: Get from Meilisearch
+        "document_count": document_count,
     }

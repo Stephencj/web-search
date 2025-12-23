@@ -35,13 +35,16 @@ export interface VideoItem {
   duration: number | null;
   embedConfig: EmbedConfig;
   // For progress tracking
-  sourceType?: 'feed' | 'saved' | 'discover';
+  sourceType?: 'feed' | 'saved' | 'discover' | 'offline';
   sourceId?: number; // Database ID for feed/saved items
   watchProgress?: number; // Existing progress in seconds
   // Content type for mixed queues (video + audio)
   contentType?: 'video' | 'audio';
   // Podcast-specific fields
   audioUrl?: string | null;
+  // Offline playback - direct blob URL
+  offlineStreamUrl?: string | null;
+  isOffline?: boolean;
 }
 
 export interface StreamInfo {
@@ -606,5 +609,46 @@ export function collectionItemToVideoItem(item: CollectionItem): VideoItem {
     contentType: isPodcast ? 'audio' : 'video',
     // For podcast episodes, the URL is the audio file
     audioUrl: isPodcast ? item.url : null,
+  };
+}
+
+/**
+ * Create VideoItem for offline playback
+ * Used when playing downloaded content from IndexedDB
+ */
+export function createOfflineVideoItem(
+  platform: string,
+  videoId: string,
+  title: string,
+  thumbnailUrl: string | null,
+  duration: number | null,
+  offlineStreamUrl: string,
+  mediaType: 'video' | 'podcast_episode' = 'video'
+): VideoItem {
+  const isPodcast = mediaType === 'podcast_episode' || platform === 'podcast';
+
+  // For offline content, we don't need a valid embed URL
+  const embedConfig: EmbedConfig = {
+    platform: platform,
+    supportsEmbed: false,
+    embedUrl: null,
+    fallbackReason: 'Playing from offline storage',
+  };
+
+  return {
+    platform,
+    videoId,
+    videoUrl: '', // No original URL needed for offline
+    title,
+    thumbnailUrl,
+    channelName: null,
+    channelUrl: null,
+    duration,
+    embedConfig,
+    sourceType: 'offline',
+    contentType: isPodcast ? 'audio' : 'video',
+    offlineStreamUrl,
+    isOffline: true,
+    audioUrl: isPodcast ? offlineStreamUrl : null,
   };
 }
