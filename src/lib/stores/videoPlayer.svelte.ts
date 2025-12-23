@@ -3,7 +3,7 @@
  * Manages global video playback state for modal and PiP modes
  */
 
-import { api, type FeedItem, type DiscoverVideoResult, type SavedVideo } from '$lib/api/client';
+import { api, type FeedItem, type DiscoverVideoResult, type SavedVideo, type CollectionItem } from '$lib/api/client';
 import { buildEmbedConfig, type EmbedConfig } from '$lib/utils/embedUrl';
 import {
   isMediaSessionSupported,
@@ -14,6 +14,7 @@ import {
   unregisterMediaSessionHandlers,
   clearMediaSession
 } from '$lib/utils/mediaSession';
+import { persistentStreamCache } from '$lib/stores/streamCache.svelte';
 
 // Custom events for cross-component playback control
 export const PLAYER_EVENTS = {
@@ -37,6 +38,10 @@ export interface VideoItem {
   sourceType?: 'feed' | 'saved' | 'discover';
   sourceId?: number; // Database ID for feed/saved items
   watchProgress?: number; // Existing progress in seconds
+  // Content type for mixed queues (video + audio)
+  contentType?: 'video' | 'audio';
+  // Podcast-specific fields
+  audioUrl?: string | null;
 }
 
 export interface StreamInfo {
@@ -65,16 +70,25 @@ const streamCache = new Map<string, StreamInfo>();
 async function fetchStreamInfo(platform: string, videoId: string): Promise<StreamInfo | null> {
   const cacheKey = `${platform}:${videoId}`;
 
-  // Return cached if available
+  // Return cached if available (in-memory)
   if (streamCache.has(cacheKey)) {
     return streamCache.get(cacheKey)!;
+  }
+
+  // Check persistent cache
+  const persistent = persistentStreamCache.get(platform, videoId);
+  if (persistent) {
+    streamCache.set(cacheKey, persistent);
+    return persistent;
   }
 
   try {
     const response = await fetch(`/api/stream/${platform}/${videoId}`);
     if (response.ok) {
       const info = await response.json();
+      // Cache in both memory and persistent storage
       streamCache.set(cacheKey, info);
+      persistentStreamCache.set(platform, videoId, info);
       return info;
     }
   } catch {
@@ -85,9 +99,25 @@ async function fetchStreamInfo(platform: string, videoId: string): Promise<Strea
 
 /**
  * Get cached stream info (does not fetch)
+ * Checks both in-memory cache and persistent cache
  */
 export function getCachedStreamInfo(platform: string, videoId: string): StreamInfo | null {
-  return streamCache.get(`${platform}:${videoId}`) || null;
+  const cacheKey = `${platform}:${videoId}`;
+
+  // Check in-memory cache first (faster)
+  if (streamCache.has(cacheKey)) {
+    return streamCache.get(cacheKey)!;
+  }
+
+  // Check persistent cache (survives page reload)
+  const persistent = persistentStreamCache.get(platform, videoId);
+  if (persistent) {
+    // Promote to in-memory cache for faster subsequent access
+    streamCache.set(cacheKey, persistent);
+    return persistent;
+  }
+
+  return null;
 }
 
 /**
@@ -439,6 +469,7 @@ export const videoPlayer = createVideoPlayerStore();
  * Convert FeedItem to VideoItem
  */
 export function feedItemToVideoItem(item: FeedItem): VideoItem {
+  const isPodcast = item.platform === 'podcast';
   const embedConfig = buildEmbedConfig(item.platform, item.video_id, item.video_url);
   return {
     platform: item.platform,
@@ -453,6 +484,8 @@ export function feedItemToVideoItem(item: FeedItem): VideoItem {
     sourceType: 'feed',
     sourceId: item.id,
     watchProgress: item.watch_progress_seconds ?? undefined,
+    contentType: isPodcast ? 'audio' : 'video',
+    audioUrl: item.audio_url,
   };
 }
 
@@ -543,4 +576,35 @@ export async function openSavedVideo(video: SavedVideo): Promise<void> {
     const videoItem = savedVideoToVideoItem(video);
     videoPlayer.openModal(videoItem);
   }
+}
+
+/**
+ * Convert CollectionItem to VideoItem
+ * Handles video, podcast_episode, and image (as video fallback) item types
+ */
+export function collectionItemToVideoItem(item: CollectionItem): VideoItem {
+  const isPodcast = item.item_type === 'podcast_episode';
+
+  // Determine platform from embed_type
+  let platform = 'other';
+  if (item.embed_type === 'youtube') platform = 'youtube';
+  else if (item.embed_type === 'vimeo') platform = 'vimeo';
+  else if (isPodcast) platform = 'podcast';
+
+  const embedConfig = buildEmbedConfig(platform, item.video_id || '', item.url);
+
+  return {
+    platform,
+    videoId: item.video_id || '',
+    videoUrl: item.url,
+    title: item.title || 'Untitled',
+    thumbnailUrl: item.thumbnail_url,
+    channelName: item.domain || null,
+    channelUrl: null,
+    duration: null,
+    embedConfig,
+    contentType: isPodcast ? 'audio' : 'video',
+    // For podcast episodes, the URL is the audio file
+    audioUrl: isPodcast ? item.url : null,
+  };
 }

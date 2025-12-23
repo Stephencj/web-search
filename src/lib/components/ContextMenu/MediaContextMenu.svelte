@@ -14,7 +14,7 @@
   export let x: number;
   export let y: number;
   export let visible = false;
-  export let mediaType: 'image' | 'video';
+  export let mediaType: 'image' | 'video' | 'podcast_episode';
   export let mediaUrl: string;
   export let thumbnailUrl: string | null = null;
   export let title: string | null = null;

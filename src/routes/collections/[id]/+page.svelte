@@ -13,8 +13,7 @@
   } from '$lib/stores/collections';
   import { MediaViewer } from '$lib/components/MediaViewer';
   import { mediaViewer, type MediaItem } from '$lib/stores/mediaViewer.svelte';
-  import { videoPlayer, type VideoItem } from '$lib/stores/videoPlayer.svelte';
-  import { buildEmbedConfig } from '$lib/utils/embedUrl';
+  import { videoPlayer, collectionItemToVideoItem, type VideoItem } from '$lib/stores/videoPlayer.svelte';
 
   let collectionId = $derived(parseInt($page.params.id || '0'));
   let showEditModal = $state(false);
@@ -89,58 +88,40 @@
     }
   }
 
-  /**
-   * Convert a collection item to a VideoItem for the video player
-   */
-  function collectionItemToVideoItem(item: CollectionItem): VideoItem {
-    const platform = item.embed_type === 'youtube' ? 'youtube' :
-                     item.embed_type === 'vimeo' ? 'vimeo' : 'other';
-    const embedConfig = buildEmbedConfig(platform, item.video_id || '', item.url);
-
-    return {
-      platform,
-      videoId: item.video_id || '',
-      videoUrl: item.url,
-      title: item.title || 'Untitled Video',
-      thumbnailUrl: item.thumbnail_url,
-      channelName: item.domain || null,
-      channelUrl: null,
-      duration: null,
-      embedConfig,
-    };
-  }
-
   function openMediaViewer(index: number) {
     if (!$currentCollection) return;
 
     const clickedItem = $currentCollection.items[index];
 
-    // For videos, use the video player with queue support
-    if (clickedItem.item_type === 'video') {
-      // Get all videos from the collection
-      const videoItems = $currentCollection.items.filter(item => item.item_type === 'video');
-      const videoQueue = videoItems.map(item => collectionItemToVideoItem(item));
+    // For videos and podcasts, use the video player with queue support
+    if (clickedItem.item_type === 'video' || clickedItem.item_type === 'podcast_episode') {
+      // Get all playable media from the collection (videos + podcasts)
+      const playableItems = $currentCollection.items.filter(
+        item => item.item_type === 'video' || item.item_type === 'podcast_episode'
+      );
+      const playQueue = playableItems.map(item => collectionItemToVideoItem(item));
 
-      // Find the index of the clicked video in the video-only array
-      const videoIndex = videoItems.findIndex(item => item.id === clickedItem.id);
+      // Find the index of the clicked item in the playable array
+      const playIndex = playableItems.findIndex(item => item.id === clickedItem.id);
 
-      // Open with queue for auto-advance
-      videoPlayer.openWithQueue(videoQueue, videoIndex >= 0 ? videoIndex : 0);
+      // Open with queue for auto-advance (supports mixed video + audio)
+      videoPlayer.openWithQueue(playQueue, playIndex >= 0 ? playIndex : 0);
       return;
     }
 
-    // For images (and mixed content fallback), use the media viewer
-    const items: MediaItem[] = $currentCollection.items.map((item) => ({
-      type: item.item_type as 'image' | 'video',
+    // For images, use the media viewer
+    const imageItems = $currentCollection.items.filter(item => item.item_type === 'image');
+    const items: MediaItem[] = imageItems.map((item) => ({
+      type: 'image' as const,
       url: item.url,
       thumbnailUrl: item.thumbnail_url || undefined,
       title: item.title || undefined,
       pageUrl: item.source_url || undefined,
       domain: item.domain || undefined,
-      embedType: item.embed_type as 'direct' | 'youtube' | 'vimeo' | 'page_link' | undefined,
-      videoId: item.video_id || undefined,
     }));
-    mediaViewer.open(items, index);
+    // Find the index in the image-only array
+    const imageIndex = imageItems.findIndex(item => item.id === clickedItem.id);
+    mediaViewer.open(items, imageIndex >= 0 ? imageIndex : 0);
   }
 </script>
 
@@ -236,6 +217,22 @@
                   {#if item.embed_type && item.embed_type !== 'direct'}
                     <span class="media-badge">{item.embed_type}</span>
                   {/if}
+                {:else if item.item_type === 'podcast_episode'}
+                  {#if item.thumbnail_url}
+                    <img src={item.thumbnail_url} alt={item.title || 'Podcast artwork'} />
+                  {:else}
+                    <div class="no-thumbnail podcast-icon">
+                      <svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32">
+                        <path d="M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z"/>
+                      </svg>
+                    </div>
+                  {/if}
+                  <div class="play-overlay podcast">
+                    <svg viewBox="0 0 24 24" fill="white" width="40" height="40">
+                      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                    </svg>
+                  </div>
+                  <span class="media-badge podcast-badge">Podcast</span>
                 {:else}
                   <img
                     src={item.thumbnail_url || item.url}
@@ -552,6 +549,18 @@
     font-size: 0.7rem;
     text-transform: uppercase;
     font-weight: 600;
+  }
+
+  .podcast-badge {
+    background: rgba(139, 92, 246, 0.9); /* Purple for podcasts */
+  }
+
+  .podcast-icon {
+    color: #8b5cf6;
+  }
+
+  .play-overlay.podcast {
+    background: rgba(139, 92, 246, 0.3);
   }
 
   .item-info {
