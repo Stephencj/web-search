@@ -286,3 +286,119 @@ export function formatBytes(bytes: number): string {
 	const i = Math.floor(Math.log(bytes) / Math.log(k));
 	return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
+
+/**
+ * Clean up old episodes based on retention policy
+ * @param maxAgeDays Delete episodes older than this many days (0 = keep all)
+ * @param maxEpisodes Keep only this many episodes per platform (0 = keep all)
+ */
+export async function cleanupOldEpisodes(
+	maxAgeDays: number = 0,
+	maxEpisodes: number = 0
+): Promise<number> {
+	const videos = await listDownloadedVideos();
+	const now = Date.now();
+	const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
+	let deletedCount = 0;
+
+	// Group by platform for maxEpisodes check
+	const byPlatform = new Map<string, DownloadMetadata[]>();
+	for (const video of videos) {
+		const list = byPlatform.get(video.platform) || [];
+		list.push(video);
+		byPlatform.set(video.platform, list);
+	}
+
+	// Delete old episodes
+	if (maxAgeDays > 0) {
+		for (const video of videos) {
+			if (now - video.downloadedAt > maxAgeMs) {
+				await deleteVideo(video.platform, video.videoId);
+				deletedCount++;
+			}
+		}
+	}
+
+	// Enforce max episodes per platform (keep newest)
+	if (maxEpisodes > 0) {
+		for (const [platform, platformVideos] of byPlatform) {
+			// Sort by download date, newest first
+			platformVideos.sort((a, b) => b.downloadedAt - a.downloadedAt);
+
+			// Delete oldest beyond limit
+			for (let i = maxEpisodes; i < platformVideos.length; i++) {
+				const video = platformVideos[i];
+				// Skip if already deleted in age check
+				if (maxAgeDays > 0 && now - video.downloadedAt > maxAgeMs) continue;
+				await deleteVideo(video.platform, video.videoId);
+				deletedCount++;
+			}
+		}
+	}
+
+	return deletedCount;
+}
+
+/**
+ * Enforce storage limit by deleting oldest downloads
+ * Uses LRU eviction - oldest downloads are deleted first
+ * @param limitBytes Maximum storage to use in bytes
+ * @returns Number of videos deleted
+ */
+export async function enforceStorageLimit(limitBytes: number): Promise<number> {
+	let currentUsage = await getStorageUsed();
+	if (currentUsage <= limitBytes) {
+		return 0;
+	}
+
+	// Get all videos sorted by download date (oldest first)
+	const videos = await listDownloadedVideos();
+	videos.sort((a, b) => a.downloadedAt - b.downloadedAt);
+
+	let deletedCount = 0;
+
+	// Delete oldest until under limit
+	for (const video of videos) {
+		if (currentUsage <= limitBytes) {
+			break;
+		}
+
+		await deleteVideo(video.platform, video.videoId);
+		currentUsage -= video.fileSize;
+		deletedCount++;
+	}
+
+	return deletedCount;
+}
+
+/**
+ * Get storage breakdown by media type
+ */
+export async function getStorageBreakdown(): Promise<{
+	videos: { count: number; size: number };
+	podcasts: { count: number; size: number };
+	total: { count: number; size: number };
+}> {
+	const videos = await listDownloadedVideos();
+
+	let videoCount = 0;
+	let videoSize = 0;
+	let podcastCount = 0;
+	let podcastSize = 0;
+
+	for (const video of videos) {
+		if (video.mediaType === 'podcast_episode' || video.platform === 'podcast') {
+			podcastCount++;
+			podcastSize += video.fileSize;
+		} else {
+			videoCount++;
+			videoSize += video.fileSize;
+		}
+	}
+
+	return {
+		videos: { count: videoCount, size: videoSize },
+		podcasts: { count: podcastCount, size: podcastSize },
+		total: { count: videos.length, size: videoSize + podcastSize }
+	};
+}
