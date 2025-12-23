@@ -4,6 +4,7 @@
 
 import { writable, derived } from 'svelte/store';
 import { api, type Collection, type CollectionWithItems, type CollectionItem, type CollectionItemCreate } from '$lib/api/client';
+import { precacheVideoStream } from '$lib/stores/streamCache.svelte';
 
 // State
 export const collections = writable<Collection[]>([]);
@@ -113,6 +114,14 @@ export async function addItemToCollection(
       }
       return col;
     });
+
+    // Pre-cache video stream in the background for instant playback
+    // (skip podcasts - they use direct audio URLs from RSS feeds)
+    if (item.item_type === 'video' && item.embed_type && item.video_id) {
+      // Don't await - let it run in background
+      precacheVideoStream(item.embed_type, item.video_id).catch(() => {});
+    }
+
     return newItem;
   } catch (e) {
     error.set(e instanceof Error ? e.message : 'Failed to add item to collection');
