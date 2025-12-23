@@ -102,7 +102,23 @@
       "Bash(src-python/app/services/feed_sync_service.py )",
       "Bash(src/lib/api/client.ts)",
       "Bash(cat:*)",
-      "Bash(git remote set-url:*)"
+      "Bash(git remote set-url:*)",
+      "Bash(ping:*)",
+      "Bash(nslookup:*)",
+      "Bash(ip route show:*)",
+      "Bash(resolvectl status:*)",
+      "Bash(host:*)",
+      "Bash(dig:*)",
+      "Bash(sudo -S tee:*)",
+      "Bash(ls:*)",
+      "Bash(systemctl status:*)",
+      "Bash(sudo -S journalctl:*)",
+      "Bash(systemctl is-active:*)",
+      "Bash(DOCKER_BUILDKIT=0 docker compose build:*)",
+      "Bash(pkill:*)",
+      "Bash(DOCKER_BUILDKIT=1 docker buildx build:*)",
+      "WebFetch(domain:video.redbarradio.net)",
+      "Bash(sudo -S systemctl restart:*)"
     ]
   }
 }

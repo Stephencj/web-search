@@ -35,8 +35,8 @@ export interface VideoItem {
   duration: number | null;
   embedConfig: EmbedConfig;
   // For progress tracking
-  sourceType?: 'feed' | 'saved' | 'discover' | 'offline';
-  sourceId?: number; // Database ID for feed/saved items
+  sourceType?: 'feed' | 'saved' | 'discover' | 'offline' | 'collection';
+  sourceId?: number; // Database ID for feed/saved/collection items
   watchProgress?: number; // Existing progress in seconds
   // Content type for mixed queues (video + audio)
   contentType?: 'video' | 'audio';
@@ -586,12 +586,15 @@ export async function openSavedVideo(video: SavedVideo): Promise<void> {
  * Handles video, podcast_episode, and image (as video fallback) item types
  */
 export function collectionItemToVideoItem(item: CollectionItem): VideoItem {
-  const isPodcast = item.item_type === 'podcast_episode';
+  // Check both item_type and embed_type for podcast detection (handles legacy saves)
+  const isPodcast = item.item_type === 'podcast_episode' || item.embed_type === 'podcast';
 
   // Determine platform from embed_type
   let platform = 'other';
   if (item.embed_type === 'youtube') platform = 'youtube';
   else if (item.embed_type === 'vimeo') platform = 'vimeo';
+  else if (item.embed_type === 'rumble') platform = 'rumble';
+  else if (item.embed_type === 'redbar') platform = 'redbar';
   else if (isPodcast) platform = 'podcast';
 
   const embedConfig = buildEmbedConfig(platform, item.video_id || '', item.url);
@@ -609,6 +612,9 @@ export function collectionItemToVideoItem(item: CollectionItem): VideoItem {
     contentType: isPodcast ? 'audio' : 'video',
     // For podcast episodes, the URL is the audio file
     audioUrl: isPodcast ? item.url : null,
+    // Track progress for collection items (stored locally)
+    sourceType: 'collection',
+    sourceId: item.id,
   };
 }
 

@@ -29,6 +29,9 @@ class FeedItemResponse(BaseModel):
     audio_file_size: Optional[int] = None
     audio_mime_type: Optional[str] = None
 
+    # Video stream (for platforms with separate video files)
+    video_stream_url: Optional[str] = None
+
     is_watched: bool
     watched_at: Optional[datetime]
     watch_progress_seconds: Optional[int]

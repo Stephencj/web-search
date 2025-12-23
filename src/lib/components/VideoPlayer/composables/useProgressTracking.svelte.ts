@@ -60,7 +60,8 @@ export function useProgressTracking(
 		if (!video?.sourceId || video.sourceType === 'discover') return;
 		if (Math.abs(currentTime - lastLocalSaveProgress) < 2) return; // Skip tiny changes
 
-		const sourceType = video.sourceType as 'feed' | 'saved';
+		// Collection items use local storage only (no API)
+		const sourceType = video.sourceType === 'collection' ? 'collection' : (video.sourceType as 'feed' | 'saved');
 		watchProgress.save(sourceType, video.sourceId, Math.floor(currentTime));
 		lastLocalSaveProgress = currentTime;
 	}
@@ -75,6 +76,12 @@ export function useProgressTracking(
 
 		// Always save locally first
 		saveLocal(currentTime);
+
+		// Collection items are local-only (no API sync)
+		if (video.sourceType === 'collection') {
+			lastApiSaveProgress = currentTime;
+			return;
+		}
 
 		try {
 			if (video.sourceType === 'feed') {
@@ -99,6 +106,14 @@ export function useProgressTracking(
 
 		const video = getVideo();
 		if (!video?.sourceId || video.sourceType === 'discover') return;
+
+		// Collection items just clear local progress (no API)
+		if (video.sourceType === 'collection') {
+			watchProgress.clear('collection', video.sourceId);
+			isWatched = true;
+			onMarkedWatched?.();
+			return;
+		}
 
 		try {
 			if (video.sourceType === 'feed') {
@@ -175,8 +190,9 @@ export function useProgressTracking(
 
 		// Get effective progress (max of local and API)
 		if (video?.sourceId && video.sourceType && video.sourceType !== 'discover') {
+			const sourceType = video.sourceType === 'collection' ? 'collection' : (video.sourceType as 'feed' | 'saved');
 			const effectiveProgress = watchProgress.getEffective(
-				video.sourceType as 'feed' | 'saved',
+				sourceType,
 				video.sourceId,
 				video.watchProgress
 			);

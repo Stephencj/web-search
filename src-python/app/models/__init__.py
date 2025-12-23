@@ -17,6 +17,8 @@ from app.models.user import User
 from app.models.user_session import UserSession
 from app.models.user_hidden_channel import UserHiddenChannel
 from app.models.user_watch_state import UserWatchState
+from app.models.transcript import Transcript
+from app.models.chapter import Chapter
 
 __all__ = [
     "Index",
@@ -37,4 +39,6 @@ __all__ = [
     "UserHiddenChannel",
     "UserSession",
     "UserWatchState",
+    "Transcript",
+    "Chapter",
 ]

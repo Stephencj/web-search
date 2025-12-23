@@ -29,6 +29,8 @@ class VideoResult:
     audio_url: Optional[str] = None  # Direct audio file URL (from RSS enclosure)
     audio_file_size: Optional[int] = None  # Size in bytes
     audio_mime_type: Optional[str] = None  # e.g., 'audio/mpeg'
+    # Video stream URL (for platforms with separate video files)
+    video_stream_url: Optional[str] = None  # Direct video file URL
 
     def to_dict(self) -> dict:
         """Convert to dictionary for API responses."""
@@ -51,6 +53,7 @@ class VideoResult:
             "audio_url": self.audio_url,
             "audio_file_size": self.audio_file_size,
             "audio_mime_type": self.audio_mime_type,
+            "video_stream_url": self.video_stream_url,
         }
 
 

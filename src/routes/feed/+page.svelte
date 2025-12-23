@@ -12,9 +12,25 @@
   } from '$lib/api/client';
   import { videoPlayer, feedItemToVideoItem, formatDuration, openFeedVideo } from '$lib/stores/videoPlayer.svelte';
   import { feedPreferences } from '$lib/stores/feedPreferences.svelte';
+  import { prefetchOnFeedLoad, prefetchOnVisible, createPrefetchObserver } from '$lib/stores/prefetchQueue.svelte';
   import FeedModeSelector from '$lib/components/FeedModeSelector/FeedModeSelector.svelte';
   import SaveButton from '$lib/components/SaveButton/SaveButton.svelte';
   import DownloadButton from '$lib/components/DownloadButton.svelte';
+
+  // Prefetch observer for viewport-based prefetching
+  let prefetchObserver: IntersectionObserver | null = null;
+
+  // Svelte action to observe video cards for prefetching
+  function observeForPrefetch(node: HTMLElement) {
+    if (prefetchObserver) {
+      prefetchObserver.observe(node);
+    }
+    return {
+      destroy() {
+        prefetchObserver?.unobserve(node);
+      }
+    };
+  }
 
   // Auto-refresh settings
   const AUTO_REFRESH_INTERVAL = 30000; // 30 seconds
@@ -85,13 +101,25 @@
     // Start auto-refresh polling
     startAutoRefresh();
 
+    // Set up viewport-based prefetching for YouTube videos
+    prefetchObserver = createPrefetchObserver((el) => {
+      const platform = el.getAttribute('data-platform');
+      const videoId = el.getAttribute('data-video-id');
+      if (platform && videoId) {
+        return { platform, videoId };
+      }
+      return null;
+    });
+
     return () => {
       stopAutoRefresh();
+      prefetchObserver?.disconnect();
     };
   });
 
   onDestroy(() => {
     stopAutoRefresh();
+    prefetchObserver?.disconnect();
   });
 
   function startAutoRefresh() {
@@ -200,6 +228,12 @@
         feedItems = response.items;
         hasMore = response.has_more;
         totalItems = response.total;
+
+        // Prefetch YouTube streams for first batch of videos
+        prefetchOnFeedLoad(
+          feedItems.map(item => ({ platform: item.platform, videoId: item.video_id })),
+          12 // Prefetch first 12 YouTube videos
+        );
       } else {
         const params: Parameters<typeof api.getFeedByChannel>[0] = {
           filter: filterStatus,
@@ -208,6 +242,13 @@
 
         const response = await api.getFeedByChannel(params);
         groupedFeed = response.channels;
+
+        // Prefetch YouTube streams for grouped view too
+        const allVideos = groupedFeed.flatMap(g => g.items);
+        prefetchOnFeedLoad(
+          allVideos.map(item => ({ platform: item.platform, videoId: item.video_id })),
+          12
+        );
       }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load feed';
@@ -536,7 +577,13 @@
     {:else}
       <div class="video-grid">
         {#each filteredFeedItems as item}
-          <div class="video-card" class:watched={item.is_watched}>
+          <div
+            class="video-card"
+            class:watched={item.is_watched}
+            data-platform={item.platform}
+            data-video-id={item.video_id}
+            use:observeForPrefetch
+          >
             <div class="thumbnail-wrapper">
               <button class="card-thumbnail" onclick={() => playVideo(item)}>
                 {#if item.thumbnail_url}
@@ -561,8 +608,8 @@
                 {/if}
               </button>
               <SaveButton
-                mediaType="video"
-                mediaUrl={item.video_url}
+                mediaType={item.platform === 'podcast' ? 'podcast_episode' : 'video'}
+                mediaUrl={item.audio_url || item.video_url}
                 thumbnailUrl={item.thumbnail_url}
                 title={item.title}
                 sourceUrl={item.video_url}

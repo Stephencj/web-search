@@ -472,6 +472,76 @@ export interface WatchStateCheckResponse {
   states: WatchStateItem[];
 }
 
+// Transcription types
+export interface TranscriptSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface TranscriptResponse {
+  id: number;
+  feed_item_id: number;
+  model_used: string;
+  language: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  progress: number | null;
+  error_message: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  segment_count: number;
+  has_full_text: boolean;
+}
+
+export interface TranscriptWithText extends TranscriptResponse {
+  full_text: string | null;
+  segments: TranscriptSegment[] | null;
+}
+
+export interface TranscriptionStatus {
+  feed_item_id: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'not_found';
+  progress: number | null;
+  error_message: string | null;
+  transcript_id: number | null;
+}
+
+export interface Chapter {
+  id: number;
+  feed_item_id: number;
+  title: string;
+  description: string | null;
+  start_seconds: number;
+  end_seconds: number | null;
+  start_formatted: string;
+  source: 'manual' | 'description_parse' | 'transcript_match' | 'pending_match';
+  confidence: number | null;
+  order_index: number;
+  created_at: string | null;
+}
+
+export interface ChapterCreate {
+  title: string;
+  start_seconds: number;
+  end_seconds?: number | null;
+  description?: string | null;
+}
+
+export interface ChapterUpdate {
+  title?: string;
+  start_seconds?: number;
+  end_seconds?: number | null;
+  description?: string | null;
+  order_index?: number;
+}
+
+export interface ChapterListResponse {
+  feed_item_id: number;
+  chapters: Chapter[];
+  total: number;
+}
+
 // Playlist types
 export interface FollowedPlaylist {
   id: number;
@@ -1358,6 +1428,61 @@ class ApiClient {
       body: JSON.stringify({ videos }),
     });
   }
+
+  // Transcription
+  async checkTranscriptionAvailability(): Promise<{ available: boolean; model: string }> {
+    return this.request('/transcription/availability');
+  }
+
+  async startTranscription(
+    feedItemId: number,
+    options: { generate_chapters?: boolean } = {}
+  ): Promise<TranscriptResponse> {
+    return this.request(`/transcription/feed-items/${feedItemId}/transcribe`, {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  }
+
+  async getTranscriptionStatus(feedItemId: number): Promise<TranscriptionStatus> {
+    return this.request(`/transcription/feed-items/${feedItemId}/status`);
+  }
+
+  async getTranscript(feedItemId: number): Promise<TranscriptWithText> {
+    return this.request(`/transcription/feed-items/${feedItemId}/transcript`);
+  }
+
+  async getChapters(feedItemId: number): Promise<ChapterListResponse> {
+    return this.request(`/transcription/feed-items/${feedItemId}/chapters`);
+  }
+
+  async addChapter(feedItemId: number, chapter: ChapterCreate): Promise<Chapter> {
+    return this.request(`/transcription/feed-items/${feedItemId}/chapters`, {
+      method: 'POST',
+      body: JSON.stringify(chapter),
+    });
+  }
+
+  async updateChapter(chapterId: number, updates: ChapterUpdate): Promise<Chapter> {
+    return this.request(`/transcription/chapters/${chapterId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async deleteChapter(chapterId: number): Promise<{ success: boolean }> {
+    return this.request(`/transcription/chapters/${chapterId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async regenerateChapters(feedItemId: number): Promise<ChapterListResponse> {
+    return this.request(`/transcription/feed-items/${feedItemId}/regenerate-chapters`, {
+      method: 'POST',
+    });
+  }
 }
 
-export const api = new ApiClient();
+export const apiClient = new ApiClient();
+// Legacy export for backwards compatibility
+export const api = apiClient;

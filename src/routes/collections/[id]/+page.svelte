@@ -14,6 +14,12 @@
   import { MediaViewer } from '$lib/components/MediaViewer';
   import { mediaViewer, type MediaItem } from '$lib/stores/mediaViewer.svelte';
   import { videoPlayer, collectionItemToVideoItem, type VideoItem } from '$lib/stores/videoPlayer.svelte';
+  import { watchProgress } from '$lib/stores/watchProgress.svelte';
+
+  // Track progress for collection items locally
+  function getItemProgress(itemId: number): number | null {
+    return watchProgress.get('collection', itemId);
+  }
 
   let collectionId = $derived(parseInt($page.params.id || '0'));
   let showEditModal = $state(false);
@@ -217,6 +223,11 @@
                   {#if item.embed_type && item.embed_type !== 'direct'}
                     <span class="media-badge">{item.embed_type}</span>
                   {/if}
+                  {#if getItemProgress(item.id)}
+                    <div class="progress-bar">
+                      <div class="progress-fill"></div>
+                    </div>
+                  {/if}
                 {:else if item.item_type === 'podcast_episode'}
                   {#if item.thumbnail_url}
                     <img src={item.thumbnail_url} alt={item.title || 'Podcast artwork'} />
@@ -233,6 +244,11 @@
                     </svg>
                   </div>
                   <span class="media-badge podcast-badge">Podcast</span>
+                  {#if getItemProgress(item.id)}
+                    <div class="progress-bar">
+                      <div class="progress-fill"></div>
+                    </div>
+                  {/if}
                 {:else}
                   <img
                     src={item.thumbnail_url || item.url}
@@ -532,6 +548,21 @@
     background: rgba(0, 0, 0, 0.3);
     opacity: 0.8;
     transition: opacity 0.2s;
+  }
+
+  .progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--color-primary, #ff0000);
+    min-width: 10%;
   }
 
   .item-card:hover .play-overlay {

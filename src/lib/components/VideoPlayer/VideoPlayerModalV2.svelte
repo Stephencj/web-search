@@ -16,6 +16,7 @@
 	import { useProgressTracking } from './composables/useProgressTracking.svelte';
 	import { usePlaybackControl } from './composables/usePlaybackControl.svelte';
 	import { PlayerContent, PlayerHeader, PlayerInfo } from './core';
+	import ChapterList from './ChapterList.svelte';
 	import type { StrategyType, PlaybackCallbacks } from './strategies/types';
 
 	interface Props {
@@ -33,6 +34,9 @@
 
 	// Delay content render to ensure modal is visible (helps with autoplay)
 	let contentReady = $state(false);
+
+	// Current playback time for chapter highlighting
+	let currentPlaybackTime = $state(0);
 
 	// Composables
 	const progress = useProgressTracking(
@@ -86,6 +90,7 @@
 		},
 		onTimeUpdate: (time, duration) => {
 			videoPlayer.updatePosition(time, duration);
+			currentPlaybackTime = time;
 		},
 		onBuffering: () => {
 			// Potential upgrade opportunity
@@ -181,6 +186,11 @@
 			useDirectStream = !useDirectStream;
 			preferredStrategy = useDirectStream ? 'direct_stream' : 'embed';
 		}
+	}
+
+	function handleChapterSeek(seconds: number) {
+		controls.seekTo(seconds);
+		currentPlaybackTime = seconds;
 	}
 
 	function handleBackdropClick(event: MouseEvent) {
@@ -317,6 +327,14 @@
 			</div>
 
 			<PlayerInfo {video} />
+
+			{#if video.sourceType === 'feed' && video.sourceId}
+				<ChapterList
+					feedItemId={video.sourceId}
+					currentTime={currentPlaybackTime}
+					onSeek={handleChapterSeek}
+				/>
+			{/if}
 		</div>
 	</div>
 {/if}

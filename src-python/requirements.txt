@@ -36,6 +36,10 @@ sentence-transformers>=2.2.0
 Pillow>=10.0.0
 torch>=2.0.0
 
+# Transcription (optional - for generating transcripts and chapters)
+openai-whisper>=20230918
+rapidfuzz>=3.0.0
+
 # Rate limiting
 aiolimiter>=1.1.0
 
