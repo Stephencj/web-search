@@ -97,8 +97,8 @@ class CollectionItem(Base):
         index=True
     )
 
-    # Item type: "image" or "video"
-    item_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    # Item type: "image", "video", or "podcast_episode"
+    item_type: Mapped[str] = mapped_column(String(20), nullable=False)
 
     # Primary URL (image_url or video_url)
     url: Mapped[str] = mapped_column(Text, nullable=False)

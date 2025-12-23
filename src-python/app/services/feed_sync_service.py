@@ -214,9 +214,17 @@ class FeedSyncService:
                     continue
 
                 # Parse upload date from flat extraction
-                # Flat extraction may have 'upload_date' or we use current time
                 upload_date_str = entry.get('upload_date')
                 upload_date = self._parse_upload_date(upload_date_str)
+
+                # If flat extraction didn't provide a date, fetch it accurately
+                if upload_date is None:
+                    upload_date = await self._fetch_youtube_video_date(video_id)
+                    if upload_date is None:
+                        # Still no date - skip this video to avoid inaccurate feed
+                        logger.warning(f"Skipping YouTube video {video_id} - no upload date available")
+                        skipped += 1
+                        continue
 
                 # Skip very old videos on first sync
                 if not channel.last_synced_at:
@@ -306,6 +314,13 @@ class FeedSyncService:
                     skipped += 1
                     continue
 
+                # Get upload date - skip video if not available
+                upload_date = video.get("upload_date")
+                if upload_date is None:
+                    logger.warning(f"Skipping Rumble video {video['video_id']} - no upload date available")
+                    skipped += 1
+                    continue
+
                 # Create feed item
                 feed_item = FeedItem(
                     channel_id=channel.id,
@@ -317,7 +332,7 @@ class FeedSyncService:
                     thumbnail_url=video.get("thumbnail_url"),
                     duration_seconds=video.get("duration_seconds"),
                     view_count=video.get("view_count"),
-                    upload_date=video.get("upload_date", datetime.utcnow()),
+                    upload_date=upload_date,
                 )
 
                 db.add(feed_item)
@@ -379,6 +394,12 @@ class FeedSyncService:
                     skipped += 1
                     continue
 
+                # Get upload date - skip video if not available
+                if video.upload_date is None:
+                    logger.warning(f"Skipping Red Bar video {video.video_id} - no upload date available")
+                    skipped += 1
+                    continue
+
                 # Create feed item
                 feed_item = FeedItem(
                     channel_id=channel.id,
@@ -390,7 +411,7 @@ class FeedSyncService:
                     thumbnail_url=video.thumbnail_url,
                     duration_seconds=video.duration_seconds,
                     view_count=video.view_count,
-                    upload_date=video.upload_date or datetime.utcnow(),
+                    upload_date=video.upload_date,
                 )
 
                 db.add(feed_item)
@@ -441,6 +462,12 @@ class FeedSyncService:
                     skipped += 1
                     continue
 
+                # Get upload date - skip episode if not available
+                if episode.upload_date is None:
+                    logger.warning(f"Skipping podcast episode {episode.video_id} - no upload date available")
+                    skipped += 1
+                    continue
+
                 # Create feed item
                 feed_item = FeedItem(
                     channel_id=channel.id,
@@ -452,7 +479,11 @@ class FeedSyncService:
                     thumbnail_url=episode.thumbnail_url,
                     duration_seconds=episode.duration_seconds,
                     view_count=episode.view_count,
-                    upload_date=episode.upload_date or datetime.utcnow(),
+                    upload_date=episode.upload_date,
+                    # Audio-specific fields from RSS enclosure
+                    audio_url=episode.audio_url,
+                    audio_file_size=episode.audio_file_size,
+                    audio_mime_type=episode.audio_mime_type,
                 )
 
                 db.add(feed_item)
@@ -482,15 +513,52 @@ class FeedSyncService:
         )
         return result.scalar_one_or_none()
 
-    def _parse_upload_date(self, date_str: Optional[str]) -> datetime:
-        """Parse upload date from yt-dlp format (YYYYMMDD)."""
+    def _parse_upload_date(self, date_str: Optional[str]) -> Optional[datetime]:
+        """Parse upload date from yt-dlp format (YYYYMMDD).
+
+        Returns None if date cannot be parsed - caller should handle missing dates
+        appropriately (fetch accurate date or skip the video).
+        """
         if not date_str:
-            return datetime.utcnow()
+            return None
 
         try:
             return datetime.strptime(date_str, "%Y%m%d")
         except (ValueError, TypeError):
-            return datetime.utcnow()
+            return None
+
+    async def _fetch_youtube_video_date(self, video_id: str) -> Optional[datetime]:
+        """Fetch accurate upload date for a YouTube video using full extraction.
+
+        This is slower than flat extraction but provides accurate dates.
+        Used as fallback when flat extraction doesn't include upload_date.
+        """
+        import yt_dlp
+
+        try:
+            url = f"https://www.youtube.com/watch?v={video_id}"
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'skip_download': True,
+                'extract_flat': False,
+            }
+
+            loop = asyncio.get_event_loop()
+
+            def extract():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return ydl.extract_info(url, download=False)
+
+            info = await loop.run_in_executor(None, extract)
+
+            if info and 'upload_date' in info:
+                return self._parse_upload_date(info['upload_date'])
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch date for YouTube video {video_id}: {e}")
+
+        return None
 
     async def _fetch_and_update_metadata(
         self,

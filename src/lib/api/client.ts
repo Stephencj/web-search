@@ -2,14 +2,13 @@
  * API client for communicating with the Python backend.
  */
 
-// Use the same hostname as the frontend but on port 8000 for API calls
-// This allows the app to work from any device on the network
+// Use relative URLs for API calls - works with any reverse proxy setup
 const getApiBase = () => {
   if (typeof window === 'undefined') {
     return 'http://localhost:8000/api';
   }
-  const hostname = window.location.hostname;
-  return `http://${hostname}:8000/api`;
+  // Use relative path - the API is served from the same origin
+  return '/api';
 };
 
 const API_BASE = getApiBase();
@@ -146,7 +145,7 @@ export interface CrawlJob {
 
 export interface CollectionItem {
   id: number;
-  item_type: 'image' | 'video';
+  item_type: 'image' | 'video' | 'podcast_episode';
   url: string;
   thumbnail_url: string | null;
   title: string | null;
@@ -175,7 +174,7 @@ export interface CollectionWithItems extends Collection {
 }
 
 export interface CollectionItemCreate {
-  item_type: 'image' | 'video';
+  item_type: 'image' | 'video' | 'podcast_episode';
   url: string;
   thumbnail_url?: string | null;
   title?: string | null;
@@ -221,6 +220,10 @@ export interface FeedItem {
   view_count: number | null;
   upload_date: string;
   categories: string[] | null;
+  // Podcast/audio fields
+  audio_url: string | null;
+  audio_file_size: number | null;
+  audio_mime_type: string | null;
   is_watched: boolean;
   watched_at: string | null;
   watch_progress_seconds: number | null;
