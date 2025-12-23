@@ -1,6 +1,7 @@
 <script lang="ts">
   import { videoPlayer, formatDuration, getCachedStreamInfo, prefetchStreams, type StreamInfo, PLAYER_EVENTS } from '$lib/stores/videoPlayer.svelte';
   import { playbackPreferences } from '$lib/stores/playbackPreferences.svelte';
+  import { watchProgress } from '$lib/stores/watchProgress.svelte';
   import { getPlatformName, getPlatformColor } from '$lib/utils/embedUrl';
   import { loadYouTubeAPI, createYouTubePlayer, isYouTubeAPIReady, type YouTubePlayer, YT_PLAYER_STATE } from '$lib/utils/youtubeApi';
   import { api } from '$lib/api/client';
@@ -14,8 +15,11 @@
 
   // Progress tracking
   let progressInterval: ReturnType<typeof setInterval> | null = null;
+  let localSaveInterval: ReturnType<typeof setInterval> | null = null;
   let lastSavedProgress = 0;
-  const PROGRESS_SAVE_INTERVAL = 15000; // Save every 15 seconds
+  let lastLocalSaveProgress = 0;
+  const PROGRESS_SAVE_INTERVAL = 15000; // Save to API every 15 seconds
+  const LOCAL_SAVE_INTERVAL = 3000; // Save to localStorage every 3 seconds
   const WATCHED_THRESHOLD = 0.90; // Mark as watched at 90% completion
 
   let iframeLoaded = $state(false);
@@ -56,7 +60,7 @@
   function handleGlobalPlay() {
     if (ytPlayer && ytPlayerReady) {
       ytPlayer.playVideo();
-    } else if (videoElement && !videoElement.paused === false) {
+    } else if (videoElement && videoElement.paused) {
       videoElement.play().catch(() => {});
     } else if (audioElement && audioElement.paused) {
       audioElement.play().catch(() => {});
@@ -129,6 +133,7 @@
     streamInfo = null;
     useDirectStream = false;
     lastSavedProgress = 0;
+    lastLocalSaveProgress = 0;
   }
 
   async function fetchStreamInfo() {
@@ -221,11 +226,26 @@
   }
 
   /**
-   * Save progress to the API
+   * Save progress to localStorage (fast, immediate)
+   */
+  function saveProgressLocal(currentTime: number) {
+    if (!video || !video.sourceId || video.sourceType === 'discover') return;
+    if (Math.abs(currentTime - lastLocalSaveProgress) < 2) return; // Skip if change is too small
+
+    const sourceType = video.sourceType as 'feed' | 'saved';
+    watchProgress.save(sourceType, video.sourceId, Math.floor(currentTime));
+    lastLocalSaveProgress = currentTime;
+  }
+
+  /**
+   * Save progress to the API (slower, for server sync)
    */
   async function saveProgress(currentTime: number) {
     if (!video || !video.sourceId || video.sourceType === 'discover') return;
     if (Math.abs(currentTime - lastSavedProgress) < 5) return; // Skip if change is too small
+
+    // Always save locally first for immediate persistence
+    saveProgressLocal(currentTime);
 
     try {
       if (video.sourceType === 'feed') {
@@ -234,9 +254,12 @@
         await api.updateSavedVideoProgress(video.sourceId, Math.floor(currentTime));
       }
       lastSavedProgress = currentTime;
+      // Mark as synced in local store
+      watchProgress.markSynced(video.sourceType as 'feed' | 'saved', video.sourceId);
       console.log('[Modal] Progress saved:', Math.floor(currentTime), 'seconds');
     } catch (e) {
-      console.warn('[Modal] Failed to save progress:', e);
+      console.warn('[Modal] Failed to save progress to API:', e);
+      // Local save already happened, so progress is preserved
     }
   }
 
@@ -252,6 +275,8 @@
       } else if (video.sourceType === 'saved') {
         await api.markSavedVideoWatched(video.sourceId, Math.floor(finalProgress));
       }
+      // Clear local progress since video is now marked as watched
+      watchProgress.clear(video.sourceType as 'feed' | 'saved', video.sourceId);
       console.log('[Modal] Marked as watched');
       onMarkWatched?.();
     } catch (e) {
@@ -276,12 +301,21 @@
    * Start periodic progress tracking
    */
   function startProgressTracking() {
-    stopProgressTracking(); // Clear any existing interval
+    stopProgressTracking(); // Clear any existing intervals
+
+    // Fast local save every 3 seconds
+    localSaveInterval = setInterval(() => {
+      const currentTime = getCurrentPlaybackTime();
+      saveProgressLocal(currentTime);
+    }, LOCAL_SAVE_INTERVAL);
+
+    // API save every 15 seconds
     progressInterval = setInterval(() => {
       const currentTime = getCurrentPlaybackTime();
       saveProgress(currentTime);
       checkWatchedThreshold();
     }, PROGRESS_SAVE_INTERVAL);
+
     console.log('[Modal] Progress tracking started');
   }
 
@@ -289,6 +323,10 @@
    * Stop progress tracking and save final progress
    */
   function stopProgressTracking() {
+    if (localSaveInterval) {
+      clearInterval(localSaveInterval);
+      localSaveInterval = null;
+    }
     if (progressInterval) {
       clearInterval(progressInterval);
       progressInterval = null;
@@ -303,10 +341,25 @@
     if (savedPlayhead > 0) {
       return savedPlayhead;
     }
-    // Second priority: existing watch progress from database
+
+    // Get progress from both local storage and API, use higher value
+    if (video?.sourceId && video.sourceType && video.sourceType !== 'discover') {
+      const effectiveProgress = watchProgress.getEffective(
+        video.sourceType as 'feed' | 'saved',
+        video.sourceId,
+        video.watchProgress
+      );
+      if (effectiveProgress && effectiveProgress > 0) {
+        console.log('[Modal] Resuming from progress:', effectiveProgress, 'seconds');
+        return effectiveProgress;
+      }
+    }
+
+    // Fallback to just API progress
     if (video?.watchProgress && video.watchProgress > 0) {
       return video.watchProgress;
     }
+
     return 0;
   }
 
@@ -422,11 +475,16 @@
               console.log('[Modal] Seeking to saved position:', startTime);
             } catch {}
           }
-          // Resume playback if switching from another mode that was playing
-          if (videoPlayer.shouldResumePlayback && ytPlayer) {
+          // Always try to start playback - browsers may block but worth trying
+          // This handles both initial open and mode switch cases
+          if (ytPlayer) {
             ytPlayer.playVideo();
-            videoPlayer.clearShouldResumePlayback();
-            console.log('[Modal] Resuming playback after mode switch');
+            if (videoPlayer.shouldResumePlayback) {
+              videoPlayer.clearShouldResumePlayback();
+              console.log('[Modal] Resuming playback after mode switch');
+            } else {
+              console.log('[Modal] Starting initial playback');
+            }
           }
           // Start progress tracking
           startProgressTracking();
@@ -494,10 +552,37 @@
       useDirectStream = false;
       ytPlayerReady = false;
       lastSavedProgress = 0;
+      lastLocalSaveProgress = 0;
       stopProgressTracking();
       // Fetch stream info for authenticated playback
       fetchStreamInfo();
     }
+  });
+
+  // Save progress on page unload or tab visibility change
+  $effect(() => {
+    if (!isOpen) return;
+
+    function saveProgressOnExit() {
+      const currentTime = getCurrentPlaybackTime();
+      if (currentTime > 0) {
+        saveProgressLocal(currentTime);
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        saveProgressOnExit();
+      }
+    }
+
+    window.addEventListener('beforeunload', saveProgressOnExit);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', saveProgressOnExit);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   });
 
   // Initialize YouTube API player for YouTube videos
@@ -861,8 +946,10 @@
             <iframe
               src={embedUrl}
               title={video.title}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
               allowfullscreen
+              referrerpolicy="no-referrer-when-downgrade"
+              sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation"
               onload={handleIframeLoad}
               onerror={handleIframeError}
               class:loaded={iframeLoaded}

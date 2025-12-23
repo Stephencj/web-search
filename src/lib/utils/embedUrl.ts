@@ -64,25 +64,35 @@ export function getEmbedUrl(platform: string, videoId: string, videoUrl: string)
   switch (platform.toLowerCase()) {
     case 'youtube':
       // YouTube embed: https://www.youtube.com/embed/{video_id}
+      // autoplay=1 - start playing immediately
+      // enablejsapi=1 - enable JS API for better control
+      // playsinline=1 - play inline on mobile
+      // rel=0 - don't show related videos from other channels
+      // origin - required for iframe postMessage communication
+      // Note: We don't set mute=1 because clicking to open a video counts as user interaction
       if (!videoId) return null;
-      return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      return `https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&playsinline=1&rel=0&origin=${encodeURIComponent(origin)}`;
 
     case 'rumble':
       // Rumble embed: https://rumble.com/embed/{video_id}/
-      // Video ID is typically like "v4abcde" extracted from URL
+      // Video ID must include 'v' prefix (e.g., "vabc123")
       if (!videoId) return null;
-      return `https://rumble.com/embed/${videoId}/`;
+      // Defensive: ensure 'v' prefix is present
+      const rumbleId = videoId.startsWith('v') ? videoId : `v${videoId}`;
+      // Include pub=4 for autoplay and proper embedding
+      return `https://rumble.com/embed/${rumbleId}/?pub=4`;
 
     case 'odysee':
       // Odysee embed: https://odysee.com/$/embed/{claim_name}/{claim_id}
       const odyseeInfo = parseOdyseeUrl(videoUrl);
       if (!odyseeInfo) return null;
-      return `https://odysee.com/$/embed/${odyseeInfo.claimName}/${odyseeInfo.claimId}`;
+      return `https://odysee.com/$/embed/${odyseeInfo.claimName}/${odyseeInfo.claimId}?autoplay=true`;
 
     case 'bitchute':
       // BitChute embed: https://www.bitchute.com/embed/{video_id}/
       if (!videoId) return null;
-      return `https://www.bitchute.com/embed/${videoId}/`;
+      return `https://www.bitchute.com/embed/${videoId}/?autoplay=1`;
 
     case 'dailymotion':
       // Dailymotion embed: https://www.dailymotion.com/embed/video/{video_id}
