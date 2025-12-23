@@ -430,8 +430,12 @@ class RumblePlatform(PlatformAdapter):
             return None
 
     def _extract_video_id(self, url: str) -> Optional[str]:
-        """Extract video ID from Rumble video URL."""
-        match = re.search(r"/v([a-zA-Z0-9]+)", url)
+        """Extract video ID from Rumble video URL.
+
+        Returns the full video ID including 'v' prefix (e.g., 'vabc123')
+        as required by Rumble's embed URL format.
+        """
+        match = re.search(r"/(v[a-zA-Z0-9]+)", url)
         if match:
             return match.group(1)
         return None

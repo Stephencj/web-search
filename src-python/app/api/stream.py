@@ -1,9 +1,10 @@
 """Stream API endpoints for authenticated video playback."""
 
 import asyncio
-from typing import Optional
+import time
+from typing import Optional, Literal
 
-from fastapi import APIRouter, HTTPException, status, Query
+from fastapi import APIRouter, HTTPException, status, Query, BackgroundTasks
 from pydantic import BaseModel
 
 from app.api.deps import DbSession
@@ -11,6 +12,13 @@ from app.services.oauth_service import get_oauth_service
 
 
 router = APIRouter()
+
+# In-memory cache for extracted streams (shared across requests)
+_stream_cache: dict[str, "StreamInfo"] = {}
+_cache_timestamps: dict[str, float] = {}
+_active_extractions: dict[str, float] = {}
+CACHE_TTL_SECONDS = 5 * 60 * 60  # 5 hours
+MAX_CACHE_ENTRIES = 100
 
 
 class StreamInfo(BaseModel):
@@ -35,6 +43,24 @@ class StreamFormats(BaseModel):
     platform: str
     formats: list[dict]
     is_authenticated: bool = False
+
+
+class ExtractionStatus(BaseModel):
+    """Status of a stream extraction."""
+    video_id: str
+    platform: str
+    status: Literal["idle", "extracting", "ready", "failed"]
+    started_at: Optional[float] = None
+    stream_info: Optional[StreamInfo] = None
+    error: Optional[str] = None
+
+
+class ExtractionStarted(BaseModel):
+    """Response when extraction is started."""
+    video_id: str
+    platform: str
+    status: Literal["started", "already_cached", "already_extracting"]
+    poll_url: str
 
 
 @router.get("/{platform}/{video_id}", response_model=StreamInfo)
@@ -152,6 +178,181 @@ async def get_stream_formats(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get formats: {e}",
         )
+
+
+# ============================================================================
+# Async Extraction Endpoints (for instant-start architecture)
+# ============================================================================
+
+
+def _get_cache_key(platform: str, video_id: str) -> str:
+    """Generate cache key for a video."""
+    return f"{platform}:{video_id}"
+
+
+def _is_cache_valid(key: str) -> bool:
+    """Check if cache entry is still valid."""
+    if key not in _cache_timestamps:
+        return False
+    return (time.time() - _cache_timestamps[key]) < CACHE_TTL_SECONDS
+
+
+def _prune_cache():
+    """Remove old entries if cache is too large."""
+    if len(_stream_cache) <= MAX_CACHE_ENTRIES:
+        return
+    # Remove oldest entries
+    sorted_keys = sorted(_cache_timestamps.keys(), key=lambda k: _cache_timestamps[k])
+    to_remove = sorted_keys[: len(sorted_keys) - MAX_CACHE_ENTRIES + 10]
+    for key in to_remove:
+        _stream_cache.pop(key, None)
+        _cache_timestamps.pop(key, None)
+
+
+@router.get("/{platform}/{video_id}/status", response_model=ExtractionStatus)
+async def get_extraction_status(
+    platform: str,
+    video_id: str,
+) -> ExtractionStatus:
+    """
+    Check the status of a stream extraction.
+
+    Use this to poll for extraction completion after starting with /extract.
+    """
+    cache_key = _get_cache_key(platform, video_id)
+
+    # Check if cached
+    if cache_key in _stream_cache and _is_cache_valid(cache_key):
+        return ExtractionStatus(
+            video_id=video_id,
+            platform=platform,
+            status="ready",
+            stream_info=_stream_cache[cache_key],
+        )
+
+    # Check if extracting
+    if cache_key in _active_extractions:
+        return ExtractionStatus(
+            video_id=video_id,
+            platform=platform,
+            status="extracting",
+            started_at=_active_extractions[cache_key],
+        )
+
+    # Not started
+    return ExtractionStatus(
+        video_id=video_id,
+        platform=platform,
+        status="idle",
+    )
+
+
+@router.post("/{platform}/{video_id}/extract", response_model=ExtractionStarted)
+async def start_extraction(
+    platform: str,
+    video_id: str,
+    db: DbSession,
+    background_tasks: BackgroundTasks,
+    quality: str = Query("best", description="Video quality"),
+) -> ExtractionStarted:
+    """
+    Start stream extraction in the background.
+
+    Returns immediately with a poll URL. Use /status to check when done.
+    This enables instant-start playback: start with embed, upgrade when ready.
+    """
+    if platform != "youtube":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Streaming not supported for platform: {platform}",
+        )
+
+    cache_key = _get_cache_key(platform, video_id)
+    poll_url = f"/api/stream/{platform}/{video_id}/status"
+
+    # Already cached?
+    if cache_key in _stream_cache and _is_cache_valid(cache_key):
+        return ExtractionStarted(
+            video_id=video_id,
+            platform=platform,
+            status="already_cached",
+            poll_url=poll_url,
+        )
+
+    # Already extracting?
+    if cache_key in _active_extractions:
+        return ExtractionStarted(
+            video_id=video_id,
+            platform=platform,
+            status="already_extracting",
+            poll_url=poll_url,
+        )
+
+    # Get OAuth token if available
+    oauth_service = get_oauth_service()
+    account = await oauth_service.get_account(db, platform)
+    access_token = None
+    is_premium = False
+    if account:
+        access_token = await oauth_service.get_valid_access_token(db, account)
+        is_premium = account.is_premium
+
+    # Mark as extracting
+    _active_extractions[cache_key] = time.time()
+
+    # Start background extraction
+    async def do_extraction():
+        try:
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
+            stream_info = await _extract_youtube_stream(
+                video_url=video_url,
+                access_token=access_token,
+                quality=quality,
+                audio_only=False,
+            )
+
+            # Cache the result
+            result = StreamInfo(
+                video_id=video_id,
+                platform=platform,
+                title=stream_info.get("title"),
+                stream_url=stream_info.get("stream_url"),
+                audio_url=stream_info.get("audio_url"),
+                thumbnail_url=stream_info.get("thumbnail"),
+                duration_seconds=stream_info.get("duration"),
+                is_authenticated=access_token is not None,
+                is_premium=is_premium,
+                quality=stream_info.get("quality"),
+                format=stream_info.get("format"),
+                error=stream_info.get("error"),
+            )
+
+            _stream_cache[cache_key] = result
+            _cache_timestamps[cache_key] = time.time()
+            _prune_cache()
+
+        except Exception as e:
+            # Cache error result briefly so we don't retry immediately
+            _stream_cache[cache_key] = StreamInfo(
+                video_id=video_id,
+                platform=platform,
+                is_authenticated=access_token is not None,
+                is_premium=is_premium,
+                error=str(e),
+            )
+            _cache_timestamps[cache_key] = time.time()
+
+        finally:
+            _active_extractions.pop(cache_key, None)
+
+    background_tasks.add_task(do_extraction)
+
+    return ExtractionStarted(
+        video_id=video_id,
+        platform=platform,
+        status="started",
+        poll_url=poll_url,
+    )
 
 
 async def _extract_youtube_stream(

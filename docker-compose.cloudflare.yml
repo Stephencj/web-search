@@ -1,0 +1,74 @@
+# Cloudflare Tunnel Production Setup
+# Uses cloudflared to create a secure tunnel - no open ports required
+
+services:
+  # Cloudflare Tunnel - Secure connection to Cloudflare
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: websearch-cloudflared
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - websearch-network
+    restart: unless-stopped
+    depends_on:
+      websearch:
+        condition: service_healthy
+
+  # Meilisearch - Full-text search engine
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: websearch-meilisearch
+    environment:
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY}
+      - MEILI_ENV=production
+    volumes:
+      - meilisearch-data:/meili_data
+    networks:
+      - websearch-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --spider http://127.0.0.1:7700/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # WebSearch - Backend + Frontend
+  websearch:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: websearch-app
+    env_file:
+      - .env
+    environment:
+      - WEBSEARCH_HOST=0.0.0.0
+      - WEBSEARCH_PORT=8000
+      - WEBSEARCH_DATA_DIR=/data
+      - WEBSEARCH_DEBUG=false
+      - WEBSEARCH_MEILISEARCH__HOST=http://meilisearch:7700
+      - WEBSEARCH_MEILISEARCH__API_KEY=${MEILI_MASTER_KEY}
+    volumes:
+      - websearch-data:/data
+    networks:
+      - websearch-network
+    depends_on:
+      meilisearch:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  websearch-network:
+    driver: bridge
+
+volumes:
+  meilisearch-data:
+  websearch-data:

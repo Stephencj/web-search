@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
-import type { PageServerLoad } from './$types';
+import type { PageLoad } from './$types';
 
-export const load: PageServerLoad = async () => {
+export const load: PageLoad = async () => {
   // Redirect root to Discover page
   throw redirect(302, '/discover');
 };

@@ -4,7 +4,7 @@ services:
     image: getmeili/meilisearch:v1.6
     container_name: websearch-meilisearch
     environment:
-      - MEILI_MASTER_KEY=TBmZdGLVexFLTf6Pl1_JZoQt1e07aBt6z-vIF4ldTF8
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY}
       - MEILI_ENV=production
     volumes:
       - meilisearch-data:/meili_data
@@ -32,7 +32,7 @@ services:
       - WEBSEARCH_DATA_DIR=/data
       - WEBSEARCH_DEBUG=false
       - WEBSEARCH_MEILISEARCH__HOST=http://meilisearch:7700
-      - WEBSEARCH_MEILISEARCH__API_KEY=TBmZdGLVexFLTf6Pl1_JZoQt1e07aBt6z-vIF4ldTF8
+      - WEBSEARCH_MEILISEARCH__API_KEY=${MEILI_MASTER_KEY}
       # OAuth settings (set in .env file)
       # - WEBSEARCH_OAUTH__YOUTUBE_CLIENT_ID=
       # - WEBSEARCH_OAUTH__YOUTUBE_CLIENT_SECRET=
@@ -40,7 +40,7 @@ services:
     volumes:
       - websearch-data:/data
     ports:
-      - "8000:8000"
+      - "8001:8000"
     depends_on:
       meilisearch:
         condition: service_healthy
