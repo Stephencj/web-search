@@ -1,4 +1,21 @@
+# Cloudflare Tunnel Production Setup
+# Uses cloudflared to create a secure tunnel - no open ports required
+
 services:
+  # Cloudflare Tunnel - Secure connection to Cloudflare
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: websearch-cloudflared
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    networks:
+      - websearch-network
+    restart: unless-stopped
+    depends_on:
+      websearch:
+        condition: service_healthy
+
   # Meilisearch - Full-text search engine
   meilisearch:
     image: getmeili/meilisearch:v1.6
@@ -8,8 +25,8 @@ services:
       - MEILI_ENV=production
     volumes:
       - meilisearch-data:/meili_data
-    ports:
-      - "7700:7700"
+    networks:
+      - websearch-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --spider http://127.0.0.1:7700/health || exit 1"]
@@ -33,18 +50,24 @@ services:
       - WEBSEARCH_DEBUG=false
       - WEBSEARCH_MEILISEARCH__HOST=http://meilisearch:7700
       - WEBSEARCH_MEILISEARCH__API_KEY=${MEILI_MASTER_KEY}
-      # OAuth settings (set in .env file)
-      # - WEBSEARCH_OAUTH__YOUTUBE_CLIENT_ID=
-      # - WEBSEARCH_OAUTH__YOUTUBE_CLIENT_SECRET=
-      # - WEBSEARCH_OAUTH__ENCRYPTION_KEY=
     volumes:
       - websearch-data:/data
-    ports:
-      - "8001:8000"
+    networks:
+      - websearch-network
     depends_on:
       meilisearch:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  websearch-network:
+    driver: bridge
 
 volumes:
   meilisearch-data:
