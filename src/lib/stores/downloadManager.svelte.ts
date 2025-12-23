@@ -202,15 +202,17 @@ async function startDownload(platform: string, videoId: string): Promise<void> {
 		}
 
 		// Combine chunks into a blob
-		const blob = new Blob(chunks, { type: info.mimeType || 'video/mp4' });
+		const defaultMime = platform === 'podcast' ? 'audio/mpeg' : 'video/mp4';
+		const blob = new Blob(chunks, { type: info.mimeType || defaultMime });
 
 		// Store in IndexedDB
 		await storeVideo(platform, videoId, blob, {
 			title: state.title,
 			thumbnailUrl: state.thumbnailUrl,
 			duration: info.duration || null,
-			mimeType: info.mimeType || 'video/mp4',
-			quality: info.quality
+			mimeType: info.mimeType || defaultMime,
+			quality: info.quality,
+			mediaType: platform === 'podcast' ? 'podcast_episode' : 'video'
 		});
 
 		// Update state

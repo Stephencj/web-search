@@ -8,6 +8,8 @@ const DB_VERSION = 1;
 const VIDEO_STORE = 'videos';
 const METADATA_STORE = 'metadata';
 
+export type MediaType = 'video' | 'podcast_episode';
+
 export interface DownloadMetadata {
 	platform: string;
 	videoId: string;
@@ -18,6 +20,7 @@ export interface DownloadMetadata {
 	mimeType: string;
 	downloadedAt: number;
 	quality?: string;
+	mediaType?: MediaType; // 'video' or 'podcast_episode'
 }
 
 interface VideoBlob {
