@@ -24,6 +24,11 @@ class FeedItemResponse(BaseModel):
     upload_date: datetime
     categories: Optional[list[str]] = None
 
+    # Podcast/audio fields
+    audio_url: Optional[str] = None
+    audio_file_size: Optional[int] = None
+    audio_mime_type: Optional[str] = None
+
     is_watched: bool
     watched_at: Optional[datetime]
     watch_progress_seconds: Optional[int]
@@ -76,7 +81,7 @@ class FeedQuery(BaseModel):
     """Query parameters for feed."""
     view: Literal["chronological", "by_channel"] = "chronological"
     filter: Literal["all", "unwatched", "watched"] = "all"
-    platform: Optional[Literal["youtube", "rumble"]] = None
+    platform: Optional[Literal["youtube", "rumble", "podcast", "redbar"]] = None
     channel_ids: Optional[list[int]] = None
     page: int = Field(default=1, ge=1)
     per_page: int = Field(default=50, ge=1, le=100)

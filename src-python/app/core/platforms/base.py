@@ -25,6 +25,10 @@ class VideoResult:
     channel_avatar_url: Optional[str] = None
     like_count: Optional[int] = None
     tags: list[str] = field(default_factory=list)
+    # Podcast/audio specific fields
+    audio_url: Optional[str] = None  # Direct audio file URL (from RSS enclosure)
+    audio_file_size: Optional[int] = None  # Size in bytes
+    audio_mime_type: Optional[str] = None  # e.g., 'audio/mpeg'
 
     def to_dict(self) -> dict:
         """Convert to dictionary for API responses."""
@@ -44,6 +48,9 @@ class VideoResult:
             "channel_avatar_url": self.channel_avatar_url,
             "like_count": self.like_count,
             "tags": self.tags,
+            "audio_url": self.audio_url,
+            "audio_file_size": self.audio_file_size,
+            "audio_mime_type": self.audio_mime_type,
         }
 
 

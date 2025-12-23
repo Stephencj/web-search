@@ -36,9 +36,9 @@ async def get_download_info(
     db: DbSession,
 ) -> DownloadInfo:
     """
-    Get download information for a video.
+    Get download information for a video or podcast episode.
 
-    Returns metadata about the downloadable video including file size,
+    Returns metadata about the downloadable content including file size,
     format, and quality. This is used by the frontend to check storage
     requirements before downloading.
     """
@@ -46,6 +46,8 @@ async def get_download_info(
         return await _get_youtube_download_info(video_id, db)
     elif platform == "rumble":
         return await _get_rumble_download_info(video_id)
+    elif platform == "podcast":
+        return await _get_podcast_download_info(video_id, db)
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -60,15 +62,17 @@ async def download_video(
     db: DbSession,
 ):
     """
-    Download a video for offline storage.
+    Download a video or podcast episode for offline storage.
 
-    Returns a streaming response with the video content.
+    Returns a streaming response with the content.
     The frontend stores this in IndexedDB for offline access.
     """
     if platform == "youtube":
         return await _stream_youtube_video(video_id, db)
     elif platform == "rumble":
         return await _stream_rumble_video(video_id)
+    elif platform == "podcast":
+        return await _stream_podcast_episode(video_id, db)
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -369,3 +373,79 @@ async def _proxy_stream(
         media_type=content_type,
         headers=response_headers,
     )
+
+
+async def _get_podcast_download_info(episode_id: str, db: DbSession) -> DownloadInfo:
+    """Get download info for a podcast episode from the database."""
+    from sqlalchemy import select
+    from app.models.feed_item import FeedItem
+
+    # Look up the feed item by video_id (which stores episode ID for podcasts)
+    stmt = select(FeedItem).where(
+        FeedItem.platform == "podcast",
+        FeedItem.video_id == episode_id
+    )
+    result = await db.execute(stmt)
+    feed_item = result.scalar_one_or_none()
+
+    if not feed_item:
+        return DownloadInfo(
+            video_id=episode_id,
+            platform="podcast",
+            error="Episode not found in database",
+        )
+
+    if not feed_item.audio_url:
+        return DownloadInfo(
+            video_id=episode_id,
+            platform="podcast",
+            title=feed_item.title,
+            error="No audio URL available for this episode",
+        )
+
+    # Get file size via HEAD request if not stored
+    file_size = feed_item.audio_file_size
+    if not file_size:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.head(feed_item.audio_url, follow_redirects=True)
+                if response.status_code == 200:
+                    file_size = int(response.headers.get("content-length", 0)) or None
+        except Exception:
+            pass
+
+    return DownloadInfo(
+        video_id=episode_id,
+        platform="podcast",
+        title=feed_item.title,
+        size=file_size,
+        mimeType=feed_item.audio_mime_type or "audio/mpeg",
+        duration=feed_item.duration_seconds,
+        quality="audio",
+        download_url=feed_item.audio_url,
+    )
+
+
+async def _stream_podcast_episode(episode_id: str, db: DbSession):
+    """Stream a podcast episode for download."""
+    from sqlalchemy import select
+    from app.models.feed_item import FeedItem
+
+    # Look up the feed item
+    stmt = select(FeedItem).where(
+        FeedItem.platform == "podcast",
+        FeedItem.video_id == episode_id
+    )
+    result = await db.execute(stmt)
+    feed_item = result.scalar_one_or_none()
+
+    if not feed_item or not feed_item.audio_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Podcast episode not found or no audio URL",
+        )
+
+    content_type = feed_item.audio_mime_type or "audio/mpeg"
+    file_size = feed_item.audio_file_size
+
+    return await _proxy_stream(feed_item.audio_url, content_type, file_size)

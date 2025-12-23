@@ -244,12 +244,23 @@ class PodcastPlatform(PlatformAdapter):
                 if since and upload_date and upload_date < since:
                     continue
 
-                # Get audio URL from enclosures
+                # Get audio URL and metadata from enclosures
                 audio_url = None
+                audio_file_size = None
+                audio_mime_type = None
                 if hasattr(entry, "enclosures") and entry.enclosures:
                     for enc in entry.enclosures:
-                        if enc.get("type", "").startswith("audio/"):
+                        enc_type = enc.get("type", "")
+                        if enc_type.startswith("audio/"):
                             audio_url = enc.get("href") or enc.get("url")
+                            audio_mime_type = enc_type
+                            # Parse file size (may be string)
+                            length = enc.get("length")
+                            if length:
+                                try:
+                                    audio_file_size = int(length)
+                                except (ValueError, TypeError):
+                                    pass
                             break
 
                 # Skip entries without audio
@@ -293,6 +304,10 @@ class PodcastPlatform(PlatformAdapter):
                     channel_name=podcast_title,
                     channel_id=self._generate_channel_id(channel_url),
                     channel_url=channel_url,
+                    # Audio-specific fields from RSS enclosure
+                    audio_url=audio_url,
+                    audio_file_size=audio_file_size,
+                    audio_mime_type=audio_mime_type,
                 ))
 
             except Exception as e:

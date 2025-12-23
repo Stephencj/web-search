@@ -44,6 +44,11 @@ class FeedItem(Base):
     upload_date: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     categories: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)  # YouTube categories
 
+    # Podcast/audio fields (from RSS enclosure)
+    audio_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)  # Direct audio file URL
+    audio_file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Size in bytes
+    audio_mime_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # e.g., 'audio/mpeg'
+
     # Watch state
     is_watched: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     watched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 class CollectionItemCreate(BaseModel):
     """Schema for adding an item to a collection."""
-    item_type: Literal["image", "video"] = Field(..., description="Type of media item")
+    item_type: Literal["image", "video", "podcast_episode"] = Field(..., description="Type of media item")
     url: str = Field(..., description="Primary URL (image_url or video_url)")
     thumbnail_url: Optional[str] = Field(None, description="Thumbnail URL for videos")
     title: Optional[str] = Field(None, max_length=500, description="Item title")
@@ -86,7 +86,7 @@ class ReorderItemsRequest(BaseModel):
 
 class QuickAddRequest(BaseModel):
     """Schema for quick-add to default Favorites collection."""
-    item_type: Literal["image", "video"]
+    item_type: Literal["image", "video", "podcast_episode"]
     url: str
     thumbnail_url: Optional[str] = None
     title: Optional[str] = None
