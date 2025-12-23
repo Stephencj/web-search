@@ -412,6 +412,8 @@ class FeedSyncService:
                     duration_seconds=video.duration_seconds,
                     view_count=video.view_count,
                     upload_date=video.upload_date,
+                    # Video stream URL for direct playback
+                    video_stream_url=video.video_stream_url,
                 )
 
                 db.add(feed_item)
