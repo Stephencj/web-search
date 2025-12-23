@@ -10,7 +10,7 @@
   import type { CollectionItemCreate } from '$lib/api/client';
 
   interface Props {
-    mediaType: 'image' | 'video';
+    mediaType: 'image' | 'video' | 'podcast_episode';
     mediaUrl: string;
     thumbnailUrl?: string | null;
     title?: string | null;

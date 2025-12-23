@@ -425,6 +425,9 @@ class RedBarPlatform(PlatformAdapter):
                 if audio_url and not audio_url.startswith("http"):
                     audio_url = urljoin(self.BASE_URL, audio_url)
 
+            # Extract video URL (for premium content with video)
+            video_stream_url = self._extract_video_url(soup, html)
+
             return VideoResult(
                 platform=self.platform_id,
                 video_id=video_id,
@@ -437,11 +440,90 @@ class RedBarPlatform(PlatformAdapter):
                 channel_name="Red Bar Radio",
                 channel_id="redbarradio",
                 channel_url=self.BASE_URL,
+                video_stream_url=video_stream_url,
             )
 
         except Exception as e:
             logger.warning(f"Failed to parse Red Bar episode page: {e}")
             return None
+
+    def _extract_video_url(self, soup: BeautifulSoup, html: str) -> Optional[str]:
+        """
+        Extract video URL from episode page.
+
+        Looks for video content in multiple locations:
+        - <video> tags with src/source
+        - og:video meta tag
+        - MP4 URLs in script tags (player configuration)
+        - data-video-* attributes
+        """
+        video_url = None
+
+        # 1. Check <video> tags
+        video_elem = soup.select_one("video")
+        if video_elem:
+            # Check direct src
+            video_url = video_elem.get("src")
+            if not video_url:
+                # Check source children
+                source = video_elem.select_one("source[src*='.mp4'], source[type*='video']")
+                if source:
+                    video_url = source.get("src")
+
+        # 2. Check og:video meta tag
+        if not video_url:
+            og_video = soup.select_one('meta[property="og:video"], meta[property="og:video:url"]')
+            if og_video:
+                video_url = og_video.get("content")
+
+        # 3. Check data-video-* attributes
+        if not video_url:
+            video_data = soup.select_one("[data-video-url], [data-video-src], [data-video]")
+            if video_data:
+                video_url = (
+                    video_data.get("data-video-url") or
+                    video_data.get("data-video-src") or
+                    video_data.get("data-video")
+                )
+
+        # 4. Search for MP4 URLs in script tags
+        if not video_url:
+            # Look for common video URL patterns in scripts
+            mp4_patterns = [
+                r'["\']([^"\']+\.mp4)["\']',  # Simple quoted .mp4 URLs
+                r'video[_\-]?url["\s:=]+["\']([^"\']+)["\']',  # video_url: "..."
+                r'src["\s:=]+["\']([^"\']+\.mp4)["\']',  # src: "...mp4"
+                r'file["\s:=]+["\']([^"\']+\.mp4)["\']',  # file: "...mp4"
+                r'source["\s:=]+["\']([^"\']+\.mp4)["\']',  # source: "...mp4"
+            ]
+
+            for pattern in mp4_patterns:
+                match = re.search(pattern, html, re.IGNORECASE)
+                if match:
+                    potential_url = match.group(1)
+                    # Validate it looks like a real video URL
+                    if (potential_url.startswith("http") or potential_url.startswith("/")) and \
+                       ".mp4" in potential_url.lower():
+                        video_url = potential_url
+                        break
+
+        # 5. Look for media.redbarradio video URLs specifically
+        if not video_url:
+            redbar_video_match = re.search(
+                r'["\']?(https?://media\.redbarradio[^"\'>\s]+\.mp4)["\']?',
+                html,
+                re.IGNORECASE
+            )
+            if redbar_video_match:
+                video_url = redbar_video_match.group(1)
+
+        # Normalize URL
+        if video_url:
+            if not video_url.startswith("http"):
+                video_url = urljoin(self.BASE_URL, video_url)
+            logger.debug(f"Found video URL: {video_url}")
+
+        return video_url
 
     def _has_next_page(self, html: str) -> bool:
         """Check if there's a next page of episodes."""

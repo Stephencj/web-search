@@ -55,12 +55,12 @@ class WatchProgressStore {
 	/**
 	 * Save progress locally (immediate persistence)
 	 */
-	save(sourceType: 'feed' | 'saved', sourceId: number, seconds: number): void {
+	save(sourceType: 'feed' | 'saved' | 'collection', sourceId: number, seconds: number): void {
 		const key = `${sourceType}:${sourceId}`;
 		this.store[key] = {
 			seconds,
 			timestamp: Date.now(),
-			synced: false
+			synced: sourceType === 'collection' // Collection items don't need API sync
 		};
 		this.store = pruneStore(this.store);
 		saveToStorage(this.store);
@@ -69,7 +69,7 @@ class WatchProgressStore {
 	/**
 	 * Get local progress for a video
 	 */
-	get(sourceType: 'feed' | 'saved', sourceId: number): number | null {
+	get(sourceType: 'feed' | 'saved' | 'collection', sourceId: number): number | null {
 		const key = `${sourceType}:${sourceId}`;
 		return this.store[key]?.seconds ?? null;
 	}
@@ -78,14 +78,14 @@ class WatchProgressStore {
 	 * Get effective progress (max of local and API)
 	 */
 	getEffective(
-		sourceType: 'feed' | 'saved' | 'discover',
+		sourceType: 'feed' | 'saved' | 'discover' | 'collection',
 		sourceId: number | undefined,
 		apiProgress: number | undefined
 	): number | undefined {
 		if (sourceType === 'discover' || !sourceId) {
 			return apiProgress;
 		}
-		const localProgress = this.get(sourceType as 'feed' | 'saved', sourceId);
+		const localProgress = this.get(sourceType as 'feed' | 'saved' | 'collection', sourceId);
 		const maxProgress = Math.max(localProgress ?? 0, apiProgress ?? 0);
 		return maxProgress > 0 ? maxProgress : undefined;
 	}
@@ -104,7 +104,7 @@ class WatchProgressStore {
 	/**
 	 * Clear progress for a video (after marking as watched)
 	 */
-	clear(sourceType: 'feed' | 'saved', sourceId: number): void {
+	clear(sourceType: 'feed' | 'saved' | 'collection', sourceId: number): void {
 		const key = `${sourceType}:${sourceId}`;
 		delete this.store[key];
 		saveToStorage(this.store);

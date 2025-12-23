@@ -49,6 +49,9 @@ class FeedItem(Base):
     audio_file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Size in bytes
     audio_mime_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # e.g., 'audio/mpeg'
 
+    # Video stream URL (for platforms with separate video files like Redbar)
+    video_stream_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)  # Direct video file URL
+
     # Watch state
     is_watched: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     watched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
