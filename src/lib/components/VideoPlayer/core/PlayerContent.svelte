@@ -55,8 +55,8 @@
 			}
 		}
 
-		// Auto-detect best strategy
-		return getBestStrategy(video, !!streamInfo?.stream_url);
+		// Auto-detect best strategy (pass streamInfo for HLS detection)
+		return getBestStrategy(video, !!streamInfo?.stream_url, streamInfo);
 	});
 
 	const isAudio = $derived(video.contentType === 'audio' || video.platform === 'podcast');

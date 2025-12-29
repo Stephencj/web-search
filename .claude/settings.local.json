@@ -120,7 +120,9 @@
       "WebFetch(domain:video.redbarradio.net)",
       "Bash(sudo -S systemctl restart:*)",
       "Bash(npm run build:*)",
-      "Bash(tr:*)"
+      "Bash(tr:*)",
+      "Bash(sudo -S docker-compose exec -T app curl:*)",
+      "Bash(sudo -S docker-compose ps:*)"
     ]
   }
 }

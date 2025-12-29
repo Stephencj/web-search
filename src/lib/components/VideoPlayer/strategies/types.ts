@@ -41,9 +41,11 @@ export type StrategyType = 'embed' | 'youtube_api' | 'direct_stream' | 'audio' |
 /**
  * Get the best strategy for a video
  */
-export function getBestStrategy(video: VideoItem, hasStreamInfo: boolean): StrategyType {
+export function getBestStrategy(video: VideoItem, hasStreamInfo: boolean, streamInfo?: StreamInfo | null): StrategyType {
 	// Red Bar with HLS video stream - use HLS strategy for video playback
-	if (video.platform === 'redbar' && video.videoStreamUrl) {
+	// Check both video.videoStreamUrl (from feed items) and streamInfo (from API fetch)
+	const hasHlsStream = video.videoStreamUrl || streamInfo?.stream_url?.includes('.m3u8');
+	if (video.platform === 'redbar' && hasHlsStream) {
 		return 'hls';
 	}
 
