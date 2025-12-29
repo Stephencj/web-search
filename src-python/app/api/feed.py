@@ -20,6 +20,9 @@ from app.schemas.feed import (
 
 router = APIRouter()
 
+# Default thumbnail for Red Bar episodes when none is set
+REDBAR_DEFAULT_THUMBNAIL = "/images/redbar-default.png"
+
 
 def _feed_item_to_response(
     item: FeedItem,
@@ -32,6 +35,11 @@ def _feed_item_to_response(
     watched_at = watch_state.watched_at if watch_state else item.watched_at
     watch_progress = watch_state.watch_progress_seconds if watch_state else item.watch_progress_seconds
 
+    # Use default thumbnail for Red Bar if none set
+    thumbnail_url = item.thumbnail_url
+    if not thumbnail_url and item.platform == "redbar":
+        thumbnail_url = REDBAR_DEFAULT_THUMBNAIL
+
     return FeedItemWithChannel(
         id=item.id,
         channel_id=item.channel_id,
@@ -40,7 +48,7 @@ def _feed_item_to_response(
         video_url=item.video_url,
         title=item.title,
         description=item.description,
-        thumbnail_url=item.thumbnail_url,
+        thumbnail_url=thumbnail_url,
         duration_seconds=item.duration_seconds,
         view_count=item.view_count,
         upload_date=item.upload_date,
@@ -527,6 +535,58 @@ async def update_watch_progress(
     await db.commit()
     await db.refresh(watch_state)
     await db.refresh(item)
+
+    return _feed_item_to_response(item, watch_state=watch_state)
+
+
+@router.put("/items/{item_id}/thumbnail", response_model=FeedItemWithChannel)
+async def set_item_thumbnail(
+    item_id: int,
+    db: DbSession,
+    user: CurrentUserOrDefault,
+    thumbnail_url: str = Query(..., description="URL of the thumbnail image"),
+) -> FeedItemWithChannel:
+    """
+    Set a custom thumbnail for a feed item.
+
+    Only works for Red Bar episodes (other platforms have their own thumbnails).
+    Pass an empty string to reset to the default Red Bar logo.
+    """
+    from loguru import logger
+
+    result = await db.execute(
+        select(FeedItem).options(selectinload(FeedItem.channel)).where(FeedItem.id == item_id)
+    )
+    item = result.scalar_one_or_none()
+
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Feed item {item_id} not found"
+        )
+
+    # Only allow setting thumbnails for Red Bar
+    if item.platform != "redbar":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Custom thumbnails are only supported for Red Bar episodes"
+        )
+
+    # Set thumbnail (empty string = reset to default)
+    item.thumbnail_url = thumbnail_url if thumbnail_url else None
+    await db.commit()
+    await db.refresh(item)
+
+    logger.info(f"Set thumbnail for {item.title}: {thumbnail_url or 'default'}")
+
+    # Get user watch state
+    watch_result = await db.execute(
+        select(UserWatchState).where(
+            UserWatchState.user_id == user.id,
+            UserWatchState.feed_item_id == item_id
+        )
+    )
+    watch_state = watch_result.scalar_one_or_none()
 
     return _feed_item_to_response(item, watch_state=watch_state)
 
