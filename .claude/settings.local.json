@@ -119,7 +119,8 @@
       "Bash(DOCKER_BUILDKIT=1 docker buildx build:*)",
       "WebFetch(domain:video.redbarradio.net)",
       "Bash(sudo -S systemctl restart:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(tr:*)"
     ]
   }
 }
