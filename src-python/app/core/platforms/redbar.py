@@ -522,10 +522,19 @@ class RedBarPlatform(PlatformAdapter):
                 if audio_match:
                     audio_url = audio_match.group(1)
 
-            # Extract HLS video URL (for premium content with video)
-            video_stream_url = self._extract_hls_url(soup, html)
+            # Extract HLS video URL from embed iframe
+            # Red Bar embeds video in /embed/vod2?id={EPISODE-ID} iframe
+            video_stream_url = None
+            embed_match = re.search(r'/embed/vod2\?id=([^"\'&\s]+)', html)
+            if embed_match:
+                embed_id = embed_match.group(1)
+                video_stream_url = self._fetch_embed_hls_url(embed_id)
 
-            # If no HLS URL found, try other video formats
+            # Fallback: try extracting from main page
+            if not video_stream_url:
+                video_stream_url = self._extract_hls_url(soup, html)
+
+            # If still no HLS URL found, try other video formats
             if not video_stream_url:
                 video_stream_url = self._extract_video_url(soup, html)
 
@@ -549,9 +558,48 @@ class RedBarPlatform(PlatformAdapter):
             logger.warning(f"Failed to parse Red Bar episode page: {e}")
             return None
 
+    def _fetch_embed_hls_url(self, embed_id: str) -> Optional[str]:
+        """
+        Fetch the embed page and extract HLS URL.
+
+        Red Bar video is served from /embed/vod2?id={EPISODE-ID} which contains
+        the signed HLS URL from vid.redbarradio.com.
+        """
+        import httpx
+
+        embed_url = f"{self.BASE_URL}/embed/vod2?id={embed_id}"
+        logger.debug(f"Fetching embed page: {embed_url}")
+
+        try:
+            with httpx.Client(timeout=30, follow_redirects=True) as client:
+                response = client.get(embed_url, cookies=self.session_cookies)
+                if response.status_code != 200:
+                    logger.debug(f"Embed page returned {response.status_code}")
+                    return None
+
+                html = response.text
+
+                # Look for HLS URL in source tag or script
+                # Pattern: https://vid.redbarradio.com/{token},{expiry}/encoded/{ID}/hls.m3u8
+                hls_match = re.search(
+                    r'https://vid\.redbarradio\.com/[^"\'<>\s]+\.m3u8',
+                    html
+                )
+                if hls_match:
+                    hls_url = hls_match.group(0)
+                    logger.info(f"Found HLS URL from embed: {hls_url[:80]}...")
+                    return hls_url
+
+                logger.debug("No HLS URL found in embed page")
+                return None
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch embed page: {e}")
+            return None
+
     def _extract_hls_url(self, soup: BeautifulSoup, html: str) -> Optional[str]:
         """
-        Extract HLS manifest URL from episode page.
+        Extract HLS manifest URL from episode page (fallback).
 
         Red Bar uses HLS streaming at vid.redbarradio.com with signed URLs.
         URL pattern: https://vid.redbarradio.com/{token},{expiry}/encoded/{EPISODE-ID}/hls/master.m3u8
