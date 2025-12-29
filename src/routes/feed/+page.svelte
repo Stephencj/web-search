@@ -641,6 +641,11 @@
                 <span class="platform-badge" style="background: {getPlatformColor(item.platform)}">
                   {getPlatformIcon(item.platform)} {item.platform}
                 </span>
+                {#if item.content_type}
+                  <span class="content-type-badge" class:video={item.content_type === 'video'} class:audio={item.content_type === 'audio'}>
+                    {item.content_type === 'video' ? '🎬' : '🎧'} {item.content_type}
+                  </span>
+                {/if}
                 {#if item.is_watched}
                   <button
                     class="action-btn-sm"
@@ -1136,6 +1141,25 @@
     color: white;
     text-transform: uppercase;
     font-weight: 600;
+  }
+
+  .content-type-badge {
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    text-transform: capitalize;
+    font-weight: 500;
+    margin-left: 4px;
+  }
+
+  .content-type-badge.video {
+    background: #4a90d9;
+    color: white;
+  }
+
+  .content-type-badge.audio {
+    background: #8b5cf6;
+    color: white;
   }
 
   /* Platform badge colors are now set via inline styles from API data */

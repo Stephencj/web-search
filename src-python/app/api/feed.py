@@ -45,6 +45,11 @@ def _feed_item_to_response(
         view_count=item.view_count,
         upload_date=item.upload_date,
         categories=item.categories,
+        audio_url=item.audio_url,
+        audio_file_size=item.audio_file_size,
+        audio_mime_type=item.audio_mime_type,
+        video_stream_url=item.video_stream_url,
+        content_type=item.content_type,
         is_watched=is_watched,
         watched_at=watched_at,
         watch_progress_seconds=watch_progress,
@@ -675,6 +680,74 @@ async def get_feed_stats(db: DbSession, user: CurrentUserOrDefault) -> dict:
         "total_channels": total_channels,
         "by_platform": by_platform,
     }
+
+
+@router.post("/backfill-redbar")
+async def backfill_redbar_urls(
+    background_tasks: BackgroundTasks,
+    db: DbSession,
+    limit: int = Query(50, ge=1, le=500, description="Episodes per batch"),
+    skip_existing: bool = Query(True, description="Skip episodes that already have URLs"),
+) -> dict:
+    """
+    Backfill missing video/audio URLs for Red Bar episodes.
+
+    Fetches each individual episode page with authentication to extract:
+    - video_stream_url (HLS manifest for video playback)
+    - audio_url (MP3 fallback)
+    - content_type ("video" or "audio")
+
+    Rate limited to 1 request/second to avoid overwhelming the server.
+    """
+    from app.services.backfill_service import backfill_service
+
+    # Run in background for large batches
+    if limit > 20:
+        background_tasks.add_task(
+            _run_backfill_in_background,
+            limit=limit,
+            skip_existing=skip_existing,
+        )
+        return {
+            "status": "started",
+            "message": f"Backfill started in background for up to {limit} episodes",
+            "note": "Use GET /api/feed/backfill-status to monitor progress",
+        }
+
+    # For small batches, run synchronously and return results
+    result = await backfill_service.backfill_redbar_video_urls(
+        db=db,
+        limit=limit,
+        skip_existing=skip_existing,
+    )
+    return result
+
+
+async def _run_backfill_in_background(limit: int, skip_existing: bool):
+    """Background task for backfill."""
+    from loguru import logger
+    from app.database import get_session_factory
+    from app.services.backfill_service import backfill_service
+
+    logger.info(f"Background backfill started (limit={limit})")
+
+    async with get_session_factory()() as db:
+        try:
+            result = await backfill_service.backfill_redbar_video_urls(
+                db=db,
+                limit=limit,
+                skip_existing=skip_existing,
+            )
+            logger.info(f"Background backfill complete: {result}")
+        except Exception as e:
+            logger.exception(f"Background backfill failed: {e}")
+
+
+@router.get("/backfill-status")
+async def get_backfill_status(db: DbSession) -> dict:
+    """Get current backfill status showing missing data counts."""
+    from app.services.backfill_service import backfill_service
+    return await backfill_service.get_backfill_status(db)
 
 
 @router.get("/history", response_model=FeedResponse)

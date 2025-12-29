@@ -112,8 +112,8 @@
 			return;
 		}
 
-		// Only fetch streams for YouTube currently
-		if (video.platform !== 'youtube') return;
+		// Only fetch streams for YouTube and Red Bar currently
+		if (video.platform !== 'youtube' && video.platform !== 'redbar') return;
 
 		const cached = streamCache.getSync(video.platform, video.videoId);
 		if (cached) {
@@ -122,7 +122,8 @@
 			return;
 		}
 
-		const result = await fetchStreamInfo(video.platform, video.videoId, 'high');
+		// Pass video URL for proper path resolution (Red Bar uses /shows/ or /archives/)
+		const result = await fetchStreamInfo(video.platform, video.videoId, 'high', video.videoUrl);
 		if (result) {
 			streamInfo = result;
 			useDirectStream = !!result.stream_url;

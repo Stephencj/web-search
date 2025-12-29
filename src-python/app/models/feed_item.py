@@ -52,6 +52,9 @@ class FeedItem(Base):
     # Video stream URL (for platforms with separate video files like Redbar)
     video_stream_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)  # Direct video file URL
 
+    # Content type: "video" (HLS stream), "audio" (MP3 only), None (unknown)
+    content_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
     # Watch state
     is_watched: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     watched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

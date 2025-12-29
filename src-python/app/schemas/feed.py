@@ -32,6 +32,9 @@ class FeedItemResponse(BaseModel):
     # Video stream (for platforms with separate video files)
     video_stream_url: Optional[str] = None
 
+    # Content type: "video" (HLS stream), "audio" (MP3 only), None (unknown)
+    content_type: Optional[str] = None
+
     is_watched: bool
     watched_at: Optional[datetime]
     watch_progress_seconds: Optional[int]

@@ -558,7 +558,8 @@ export const streamCache = new MultiTierStreamCache();
 export async function fetchStreamInfo(
 	platform: string,
 	videoId: string,
-	priority: CachePriority = 'normal'
+	priority: CachePriority = 'normal',
+	videoUrl?: string
 ): Promise<StreamInfo | null> {
 	// Check cache first
 	const cached = await streamCache.get(platform, videoId);
@@ -572,15 +573,21 @@ export async function fetchStreamInfo(
 		return state.promise;
 	}
 
-	// Only YouTube supports direct streams currently
-	if (platform !== 'youtube') {
+	// Only YouTube and Red Bar support direct streams currently
+	if (platform !== 'youtube' && platform !== 'redbar') {
 		return null;
 	}
 
 	// Start extraction
 	const promise = (async (): Promise<StreamInfo | null> => {
 		try {
-			const response = await fetch(`/api/stream/${platform}/${videoId}`);
+			// Build URL with optional video_url query param for Red Bar
+			let url = `/api/stream/${platform}/${videoId}`;
+			if (videoUrl) {
+				url += `?video_url=${encodeURIComponent(videoUrl)}`;
+			}
+
+			const response = await fetch(url);
 			if (response.ok) {
 				const info: StreamInfo = await response.json();
 				await streamCache.set(platform, videoId, info, priority);

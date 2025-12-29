@@ -12,6 +12,7 @@
 	import DirectStreamStrategy from '../strategies/DirectStreamStrategy.svelte';
 	import YouTubeApiStrategy from '../strategies/YouTubeApiStrategy.svelte';
 	import AudioStrategy from '../strategies/AudioStrategy.svelte';
+	import HLSStrategy from '../strategies/HLSStrategy.svelte';
 	import EmbedFallback from '../EmbedFallback.svelte';
 
 	interface Props {
@@ -40,6 +41,9 @@
 			if (preferredStrategy === 'direct_stream' && streamInfo?.stream_url) {
 				return 'direct_stream';
 			}
+			if (preferredStrategy === 'hls' && (video.videoStreamUrl || streamInfo?.stream_url)) {
+				return 'hls';
+			}
 			if (preferredStrategy === 'audio' && (video.contentType === 'audio' || video.platform === 'redbar' || video.platform === 'podcast')) {
 				return 'audio';
 			}
@@ -55,13 +59,16 @@
 		return getBestStrategy(video, !!streamInfo?.stream_url);
 	});
 
-	const isAudio = $derived(video.contentType === 'audio' || video.platform === 'redbar' || video.platform === 'podcast');
+	const isAudio = $derived(video.contentType === 'audio' || video.platform === 'podcast');
 	const hasDirectStream = $derived(!!streamInfo?.stream_url);
+	const hasHlsStream = $derived(!!video.videoStreamUrl || (streamInfo?.stream_url?.includes('.m3u8')));
 	const canEmbed = $derived(video.embedConfig.supportsEmbed);
 </script>
 
 <div class="player-content">
-	{#if activeStrategy === 'audio'}
+	{#if activeStrategy === 'hls' && hasHlsStream}
+		<HLSStrategy {video} {startTime} {autoplay} {callbacks} {streamInfo} />
+	{:else if activeStrategy === 'audio'}
 		<AudioStrategy {video} {startTime} {autoplay} {callbacks} />
 	{:else if activeStrategy === 'direct_stream' && hasDirectStream}
 		<DirectStreamStrategy {video} {startTime} {autoplay} {callbacks} {streamInfo} />

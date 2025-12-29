@@ -374,14 +374,19 @@ class FeedSyncService:
             # Create adapter with cookies
             adapter = RedBarPlatform(session_cookies=cookies or {})
 
-            # Get videos since last sync (or last 90 days for new channels)
-            # Red Bar has fewer, longer episodes so we look back further
-            since = channel.last_synced_at or (datetime.utcnow() - timedelta(days=90))
+            # Red Bar has infrequent episodes (sometimes months apart)
+            # For first sync, don't filter by date to get full archive
+            # For subsequent syncs, use a 1-year lookback
+            if channel.last_synced_at:
+                since = channel.last_synced_at - timedelta(days=7)  # Small buffer
+            else:
+                since = None  # First sync: get all available episodes
 
-            # Get channel videos
+            # Get channel videos (since=None means no date filter)
+            # Red Bar has 1800+ episodes going back to early 2000s
             videos = await adapter.get_channel_videos(
                 channel.channel_url,
-                max_results=50,
+                max_results=2000,  # Get full archive
                 since=since,
             )
 
@@ -394,11 +399,32 @@ class FeedSyncService:
                     skipped += 1
                     continue
 
-                # Get upload date - skip video if not available
-                if video.upload_date is None:
-                    logger.warning(f"Skipping Red Bar video {video.video_id} - no upload date available")
-                    skipped += 1
-                    continue
+                # Get upload date - use discovered_at if not available
+                upload_date = video.upload_date or datetime.utcnow()
+
+                # For NEW episodes, fetch individual page to get video/audio URLs
+                # The list page doesn't have these URLs - they're on individual episode pages
+                video_stream_url = video.video_stream_url
+                audio_url = video.audio_url
+                content_type = None
+
+                if not video_stream_url and not audio_url:
+                    try:
+                        # Fetch full episode info (includes video/audio URLs)
+                        full_info = await adapter.get_video_info(video.video_url)
+                        if full_info:
+                            video_stream_url = full_info.video_stream_url
+                            audio_url = full_info.audio_url
+                            # Set content type based on what we found
+                            if video_stream_url:
+                                content_type = "video"
+                            elif audio_url:
+                                content_type = "audio"
+
+                        # Rate limit between individual page fetches
+                        await asyncio.sleep(0.5)
+                    except Exception as e:
+                        logger.debug(f"Failed to fetch full info for {video.video_id}: {e}")
 
                 # Create feed item
                 feed_item = FeedItem(
@@ -411,9 +437,13 @@ class FeedSyncService:
                     thumbnail_url=video.thumbnail_url,
                     duration_seconds=video.duration_seconds,
                     view_count=video.view_count,
-                    upload_date=video.upload_date,
-                    # Video stream URL for direct playback
-                    video_stream_url=video.video_stream_url,
+                    upload_date=upload_date,
+                    # Audio URL for MP3 playback
+                    audio_url=audio_url,
+                    # Video stream URL for HLS playback
+                    video_stream_url=video_stream_url,
+                    # Content type
+                    content_type=content_type,
                 )
 
                 db.add(feed_item)

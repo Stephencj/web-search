@@ -28,6 +28,7 @@ class Platform(Enum):
     YOUTUBE = "youtube"
     RUMBLE = "rumble"
     PODCAST = "podcast"
+    REDBAR = "redbar"
     UNKNOWN = "unknown"
 
 
@@ -320,6 +321,15 @@ def generate_podcast_channel_id(feed_url: str) -> str:
 
 # ==================== PLATFORM DETECTION ====================
 
+def is_redbar_url(url: str) -> bool:
+    """Check if a URL is from Red Bar Radio."""
+    try:
+        parsed = urlparse(url.lower())
+        return parsed.netloc in ["redbarradio.net", "www.redbarradio.net"]
+    except Exception:
+        return False
+
+
 def detect_platform(url: str) -> Platform:
     """
     Detect which video platform a URL belongs to.
@@ -334,6 +344,8 @@ def detect_platform(url: str) -> Platform:
         return Platform.YOUTUBE
     if is_rumble_url(url):
         return Platform.RUMBLE
+    if is_redbar_url(url):
+        return Platform.REDBAR
     if is_podcast_url(url):
         return Platform.PODCAST
     return Platform.UNKNOWN
@@ -398,5 +410,8 @@ def detect_channel_info(url: str) -> tuple[Platform, str | None]:
         return platform, extract_rumble_channel_id(url)
     elif platform == Platform.PODCAST:
         return platform, generate_podcast_channel_id(url)
+    elif platform == Platform.REDBAR:
+        # Red Bar is a single channel/show
+        return platform, "redbarradio"
     else:
         return platform, None

@@ -42,6 +42,8 @@ export interface VideoItem {
   contentType?: 'video' | 'audio';
   // Podcast-specific fields
   audioUrl?: string | null;
+  // Direct video stream URL (HLS, MP4, etc.)
+  videoStreamUrl?: string | null;
   // Offline playback - direct blob URL
   offlineStreamUrl?: string | null;
   isOffline?: boolean;
@@ -473,6 +475,7 @@ export const videoPlayer = createVideoPlayerStore();
  */
 export function feedItemToVideoItem(item: FeedItem): VideoItem {
   const isPodcast = item.platform === 'podcast';
+  const isRedbar = item.platform === 'redbar';
   const embedConfig = buildEmbedConfig(item.platform, item.video_id, item.video_url);
   return {
     platform: item.platform,
@@ -487,8 +490,10 @@ export function feedItemToVideoItem(item: FeedItem): VideoItem {
     sourceType: 'feed',
     sourceId: item.id,
     watchProgress: item.watch_progress_seconds ?? undefined,
+    // Red Bar defaults to video content, podcasts to audio
     contentType: isPodcast ? 'audio' : 'video',
     audioUrl: item.audio_url,
+    videoStreamUrl: item.video_stream_url,
   };
 }
 
