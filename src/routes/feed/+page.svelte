@@ -338,6 +338,28 @@
     }
   }
 
+  async function handleSetThumbnail(item: FeedItem) {
+    // Only for Red Bar
+    if (item.platform !== 'redbar') return;
+
+    const currentUrl = item.thumbnail_url?.startsWith('/images/') ? '' : (item.thumbnail_url || '');
+    const newUrl = prompt(
+      'Enter thumbnail URL (leave empty for default Red Bar logo):',
+      currentUrl
+    );
+
+    // User cancelled
+    if (newUrl === null) return;
+
+    try {
+      const updated = await api.setFeedItemThumbnail(item.id, newUrl);
+      updateItemInList(updated);
+    } catch (e) {
+      console.error('Set thumbnail failed:', e);
+      alert('Failed to set thumbnail');
+    }
+  }
+
   function updateItemInList(updated: FeedItem) {
     feedItems = feedItems.map((i) => (i.id === updated.id ? { ...i, ...updated } : i));
     // Also update in grouped view if present
@@ -664,6 +686,17 @@
                   >
                     <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
                       <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                    </svg>
+                  </button>
+                {/if}
+                {#if item.platform === 'redbar'}
+                  <button
+                    class="action-btn-sm"
+                    title="Set custom thumbnail"
+                    onclick={() => handleSetThumbnail(item)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                      <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z" />
                     </svg>
                   </button>
                 {/if}

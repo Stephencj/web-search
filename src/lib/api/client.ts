@@ -1166,6 +1166,10 @@ class ApiClient {
     return this.request(`/feed/items/${id}`);
   }
 
+  async setFeedItemThumbnail(id: number, thumbnailUrl: string): Promise<FeedItem> {
+    return this.request(`/feed/items/${id}/thumbnail?thumbnail_url=${encodeURIComponent(thumbnailUrl)}`, { method: 'PUT' });
+  }
+
   async syncAllFeeds(): Promise<SyncResult[]> {
     return this.request('/feed/sync', { method: 'POST' });
   }
