@@ -224,6 +224,10 @@ export interface FeedItem {
   audio_url: string | null;
   audio_file_size: number | null;
   audio_mime_type: string | null;
+  // Video stream URL (HLS, MP4, etc.)
+  video_stream_url: string | null;
+  // Content type: "video" (HLS stream), "audio" (MP3 only), null (unknown)
+  content_type: 'video' | 'audio' | null;
   is_watched: boolean;
   watched_at: string | null;
   watch_progress_seconds: number | null;

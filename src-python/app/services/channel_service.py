@@ -351,6 +351,8 @@ class ChannelService:
             return await self._fetch_rumble_metadata(url)
         elif platform == Platform.PODCAST:
             return await self._fetch_podcast_metadata(url)
+        elif platform == Platform.REDBAR:
+            return await self._fetch_redbar_metadata(url)
         return {}
 
     async def _fetch_youtube_metadata(self, url: str) -> dict:
@@ -566,6 +568,32 @@ class ChannelService:
             logger.warning(f"Failed to fetch podcast metadata for {url}: {e}")
             return {}
 
+    async def _fetch_redbar_metadata(self, url: str) -> dict:
+        """Fetch Red Bar Radio channel metadata."""
+        try:
+            from app.core.platforms.redbar import RedBarPlatform
+
+            adapter = RedBarPlatform()
+            channel_info = await adapter.get_channel_info(url)
+
+            if channel_info:
+                return {
+                    "name": channel_info.name,
+                    "description": channel_info.description,
+                    "avatar_url": channel_info.avatar_url,
+                    "subscriber_count": channel_info.subscriber_count,
+                }
+            return {
+                "name": "Red Bar Radio",
+                "description": "Comedy talk radio show and podcast since 2003",
+            }
+        except Exception as e:
+            logger.warning(f"Failed to fetch Red Bar metadata: {e}")
+            return {
+                "name": "Red Bar Radio",
+                "description": "Comedy talk radio show and podcast since 2003",
+            }
+
     def _normalize_channel_url(
         self,
         url: str,
@@ -583,6 +611,8 @@ class ChannelService:
         elif platform == Platform.PODCAST:
             # For podcasts, the URL is the RSS feed URL itself
             return extract_podcast_feed_url(url)
+        elif platform == Platform.REDBAR:
+            return "https://redbarradio.net"
         return url
 
 

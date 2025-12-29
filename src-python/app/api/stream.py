@@ -6,6 +6,7 @@ from typing import Optional, Literal
 
 from fastapi import APIRouter, HTTPException, status, Query, BackgroundTasks
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DbSession
 from app.services.oauth_service import get_oauth_service
@@ -70,6 +71,7 @@ async def get_stream_info(
     db: DbSession,
     quality: str = Query("best", description="Video quality (best, 1080p, 720p, 480p, worst)"),
     audio_only: bool = Query(False, description="Get audio stream only"),
+    video_url: Optional[str] = Query(None, description="Original video URL for proper path resolution"),
 ) -> StreamInfo:
     """
     Get direct stream URL for a video.
@@ -78,14 +80,19 @@ async def get_stream_info(
     extraction for premium benefits (no ads, higher quality).
 
     Args:
-        platform: Platform ID (youtube, rumble)
+        platform: Platform ID (youtube, rumble, redbar)
         video_id: Video ID on the platform
         quality: Desired video quality
         audio_only: If true, return audio stream only
+        video_url: Original video URL (used for Red Bar to determine /shows/ vs /archives/ path)
 
     Returns:
         StreamInfo with direct stream URLs
     """
+    # Handle Red Bar
+    if platform == "redbar":
+        return await _get_redbar_stream(video_id, audio_only, video_url, db)
+
     if platform != "youtube":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -530,3 +537,103 @@ async def _list_youtube_formats(
 
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, extract)
+
+
+async def _get_redbar_stream(
+    video_id: str,
+    audio_only: bool = False,
+    video_url: Optional[str] = None,
+    db: Optional[AsyncSession] = None,
+) -> StreamInfo:
+    """
+    Get Red Bar Radio stream info.
+
+    Fetches the episode page and extracts the HLS video URL or MP3 audio URL.
+
+    Args:
+        video_id: Red Bar episode ID (slug from URL)
+        audio_only: If true, prefer audio URL over video
+        video_url: Original video URL (if provided, uses correct path)
+        db: Database session for auth cookie retrieval
+
+    Returns:
+        StreamInfo with HLS stream URL and audio fallback
+    """
+    from app.core.platforms.redbar import RedBarPlatform
+    from app.services.redbar_auth_service import get_redbar_auth_service
+    from loguru import logger
+
+    # Get session cookies for authenticated access
+    session_cookies = {}
+    if db:
+        try:
+            auth_service = get_redbar_auth_service()
+            cookies = await auth_service.get_session_cookies(db)
+            if cookies:
+                session_cookies = cookies
+                logger.debug(f"Using authenticated session for Red Bar stream")
+        except Exception as e:
+            logger.warning(f"Failed to get Red Bar session cookies: {e}")
+
+    adapter = RedBarPlatform(session_cookies=session_cookies)
+
+    # Determine episode URL
+    # Use provided video_url if available (has correct /shows/ or /archives/ path)
+    if video_url and "redbarradio.net" in video_url:
+        episode_url = video_url
+        logger.debug(f"Using provided video URL: {episode_url}")
+    else:
+        # Default to /shows/ path
+        episode_url = f"https://redbarradio.net/shows/{video_id}"
+        logger.debug(f"Constructed episode URL: {episode_url}")
+
+    try:
+        # Fetch episode info (this will extract HLS and audio URLs)
+        result = await adapter.get_video_info(episode_url)
+
+        if not result:
+            logger.warning(f"No result from Red Bar adapter for {video_id}")
+            return StreamInfo(
+                video_id=video_id,
+                platform="redbar",
+                error="Episode not found or not accessible",
+            )
+
+        # Build response
+        stream_url = None
+        audio_url = result.audio_url
+        format_type = None
+
+        # Prefer audio if requested
+        if audio_only and audio_url:
+            stream_url = audio_url
+            format_type = "mp3"
+        elif result.video_stream_url:
+            stream_url = result.video_stream_url
+            format_type = "hls"
+        elif audio_url:
+            # Fallback to audio if no video available
+            stream_url = audio_url
+            format_type = "mp3"
+
+        return StreamInfo(
+            video_id=video_id,
+            platform="redbar",
+            title=result.title,
+            stream_url=stream_url,
+            audio_url=audio_url,
+            thumbnail_url=result.thumbnail_url,
+            duration_seconds=result.duration_seconds,
+            is_authenticated=bool(adapter.session_cookies),
+            is_premium=bool(adapter.session_cookies),
+            quality="HLS" if format_type == "hls" else "Audio",
+            format=format_type,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get Red Bar stream for {video_id}: {e}")
+        return StreamInfo(
+            video_id=video_id,
+            platform="redbar",
+            error=str(e),
+        )

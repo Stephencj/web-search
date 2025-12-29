@@ -197,20 +197,112 @@ class RedBarPlatform(PlatformAdapter):
         return self._parse_episode_page(html, video_url)
 
     def _parse_episode_list(self, html: str, max_results: int) -> list[VideoResult]:
-        """Parse episodes from a list page."""
+        """Parse episodes from Red Bar's episode list page."""
         results = []
 
         try:
             soup = BeautifulSoup(html, "lxml")
 
-            # Try multiple common WordPress patterns for episode containers
+            # Red Bar uses a table structure for episode listing
+            # Look for the episode table first
+            episode_table = soup.select_one("table.full-content-list, table#media-content, table")
+
+            if episode_table:
+                # Parse table rows - each row is an episode
+                rows = episode_table.select("tbody tr")
+
+                for row in rows[:max_results]:
+                    try:
+                        # Get all cells in the row
+                        cells = row.select("td")
+                        if len(cells) < 2:
+                            continue
+
+                        # First cell: date with link
+                        # Second cell: episode title with link
+                        date_cell = cells[0]
+                        title_cell = cells[1]
+
+                        # Get the episode link (from title cell or date cell)
+                        link = title_cell.select_one("a[href]") or date_cell.select_one("a[href]")
+                        if not link:
+                            continue
+
+                        href = link.get("href", "")
+                        if not href:
+                            continue
+
+                        # Skip non-episode links
+                        if any(skip in href.lower() for skip in ["/user/", "/login", "/register", "javascript:"]):
+                            continue
+
+                        # Must be a redbarradio.net link or relative path
+                        if href.startswith("http") and "redbarradio.net" not in href:
+                            continue
+
+                        if not href.startswith("http"):
+                            href = urljoin(self.BASE_URL, href)
+
+                        video_id = self._extract_episode_id(href)
+                        if not video_id:
+                            continue
+
+                        # Get title from title cell
+                        title = title_cell.get_text(strip=True)
+                        if not title or len(title) < 3:
+                            continue
+
+                        # Parse date from date cell (format: MM/DD/YY)
+                        upload_date = None
+                        date_text = date_cell.get_text(strip=True)
+                        if date_text:
+                            # Try MM/DD/YY format
+                            date_match = re.match(r"(\d{1,2})/(\d{1,2})/(\d{2,4})", date_text)
+                            if date_match:
+                                month, day, year = date_match.groups()
+                                # Handle 2-digit year
+                                if len(year) == 2:
+                                    year = "20" + year
+                                try:
+                                    upload_date = datetime(int(year), int(month), int(day))
+                                except ValueError:
+                                    pass
+
+                        # Check if it's a free episode (third cell may have "FREE!" class)
+                        is_free = False
+                        if len(cells) >= 3:
+                            free_link = cells[2].select_one("a.free")
+                            is_free = free_link is not None
+
+                        results.append(VideoResult(
+                            platform=self.platform_id,
+                            video_id=video_id,
+                            video_url=href,
+                            title=title,
+                            description=f"{'Free episode' if is_free else 'Scars Club episode'}",
+                            thumbnail_url=None,
+                            duration_seconds=None,
+                            upload_date=upload_date,
+                            channel_name="Red Bar Radio",
+                            channel_id="redbarradio",
+                            channel_url=self.BASE_URL,
+                        ))
+
+                        logger.debug(f"Parsed Red Bar episode: {title} ({href})")
+
+                    except Exception as e:
+                        logger.debug(f"Failed to parse episode row: {e}")
+                        continue
+
+                if results:
+                    logger.info(f"Parsed {len(results)} episodes from Red Bar table")
+                    return results
+
+            # Fallback: Try article-based parsing for search results or other pages
             episode_selectors = [
                 "article.post",
                 ".episode-item",
                 ".post-item",
-                ".episodes-list article",
-                ".node-episode",
-                "article",
             ]
 
             episodes = []
@@ -221,18 +313,15 @@ class RedBarPlatform(PlatformAdapter):
 
             # If no containers found, try parsing h2 links directly (search results page)
             if not episodes:
-                # Red Bar search results use simple h2 > a structure
                 h2_links = soup.select("h2 a[href], h3 a[href]")
                 for link in h2_links[:max_results]:
                     href = link.get("href", "")
                     if not href:
                         continue
 
-                    # Skip non-content links
                     if any(skip in href.lower() for skip in ["/user/", "/login", "/register", "javascript:"]):
                         continue
 
-                    # Must be a redbarradio.net link or relative path
                     if href.startswith("http") and "redbarradio.net" not in href:
                         continue
 
@@ -247,11 +336,9 @@ class RedBarPlatform(PlatformAdapter):
                     if not title or len(title) < 3:
                         continue
 
-                    # Try to find date near the link
                     upload_date = None
                     parent = link.find_parent()
                     if parent:
-                        # Look for date pattern in nearby text
                         parent_text = parent.get_text()
                         date_match = re.search(
                             r"(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})",
@@ -415,8 +502,8 @@ class RedBarPlatform(PlatformAdapter):
                 minutes = int(duration_match.group(2) or 0)
                 duration_seconds = hours * 3600 + minutes * 60
 
-            # Find audio/download URL
-            audio_url = video_url
+            # Find audio/download URL (MP3 fallback)
+            audio_url = None
             audio_link = soup.select_one(
                 "a[href*='.mp3'], a[href*='media.redbarradio'], audio source, .download-link a"
             )
@@ -425,13 +512,27 @@ class RedBarPlatform(PlatformAdapter):
                 if audio_url and not audio_url.startswith("http"):
                     audio_url = urljoin(self.BASE_URL, audio_url)
 
-            # Extract video URL (for premium content with video)
-            video_stream_url = self._extract_video_url(soup, html)
+            # Also look for audio URL in specific patterns
+            if not audio_url:
+                audio_match = re.search(
+                    r'["\']?(https?://media\.redbarradio[^"\'>\s]+\.mp3)["\']?',
+                    html,
+                    re.IGNORECASE
+                )
+                if audio_match:
+                    audio_url = audio_match.group(1)
+
+            # Extract HLS video URL (for premium content with video)
+            video_stream_url = self._extract_hls_url(soup, html)
+
+            # If no HLS URL found, try other video formats
+            if not video_stream_url:
+                video_stream_url = self._extract_video_url(soup, html)
 
             return VideoResult(
                 platform=self.platform_id,
                 video_id=video_id,
-                video_url=audio_url or video_url,
+                video_url=video_url,  # Keep original episode page URL
                 title=title,
                 description=description,
                 thumbnail_url=thumbnail_url,
@@ -440,22 +541,86 @@ class RedBarPlatform(PlatformAdapter):
                 channel_name="Red Bar Radio",
                 channel_id="redbarradio",
                 channel_url=self.BASE_URL,
-                video_stream_url=video_stream_url,
+                audio_url=audio_url,  # MP3 fallback
+                video_stream_url=video_stream_url,  # HLS stream
             )
 
         except Exception as e:
             logger.warning(f"Failed to parse Red Bar episode page: {e}")
             return None
 
+    def _extract_hls_url(self, soup: BeautifulSoup, html: str) -> Optional[str]:
+        """
+        Extract HLS manifest URL from episode page.
+
+        Red Bar uses HLS streaming at vid.redbarradio.com with signed URLs.
+        URL pattern: https://vid.redbarradio.com/{token},{expiry}/encoded/{EPISODE-ID}/hls/master.m3u8
+        """
+        # Look for HLS manifest in JavaScript/HTML
+        hls_patterns = [
+            # Direct HLS manifest URLs
+            r'["\']?(https://vid\.redbarradio\.com/[^"\']+/hls/[^"\']*\.m3u8)["\']?',
+            r'["\']?(https://vid\.redbarradio\.com/[^"\']+/hls/master\.m3u8)["\']?',
+            # Generic HLS source patterns
+            r'source["\s:=]+["\']([^"\']+\.m3u8)["\']',
+            r'hls["\s:=]+["\']([^"\']+\.m3u8)["\']',
+            r'src["\s:=]+["\']([^"\']+\.m3u8)["\']',
+        ]
+
+        for pattern in hls_patterns:
+            match = re.search(pattern, html, re.IGNORECASE)
+            if match:
+                url = match.group(1)
+                logger.debug(f"Found HLS manifest URL: {url}")
+                return url
+
+        # Look for vid.redbarradio base URL pattern and construct manifest
+        # Pattern: vid.redbarradio.com/{token},{expiry}/encoded/{EPISODE-ID}
+        token_pattern = r'vid\.redbarradio\.com/([^/,]+,[^/]+)/encoded/([^/\s"\']+)'
+        match = re.search(token_pattern, html)
+        if match:
+            token, episode_id = match.groups()
+            hls_url = f"https://vid.redbarradio.com/{token}/encoded/{episode_id}/hls/master.m3u8"
+            logger.debug(f"Constructed HLS URL from token: {hls_url}")
+            return hls_url
+
+        # Look for any vid.redbarradio URL that might lead to HLS
+        vid_pattern = r'["\']?(https://vid\.redbarradio\.com/[^"\'>\s]+)["\']?'
+        match = re.search(vid_pattern, html)
+        if match:
+            base_url = match.group(1)
+            # Check if it's already an HLS URL
+            if '.m3u8' in base_url:
+                return base_url
+            # Try to construct master.m3u8 URL
+            if '/encoded/' in base_url:
+                parts = base_url.split('/hls/')
+                if len(parts) > 1:
+                    # Already has /hls/ path, construct master URL
+                    return parts[0] + '/hls/master.m3u8'
+                elif '/encoded/' in base_url:
+                    # Has /encoded/ but no /hls/, append it
+                    base = base_url.rstrip('/')
+                    # Remove any segment path
+                    if '.ts' in base or '.aac' in base:
+                        base = '/'.join(base.split('/')[:-1])
+                    if not base.endswith('/hls'):
+                        base = base.rsplit('/hls', 1)[0] if '/hls' in base else base
+                    return f"{base}/hls/master.m3u8"
+
+        return None
+
     def _extract_video_url(self, soup: BeautifulSoup, html: str) -> Optional[str]:
         """
-        Extract video URL from episode page.
+        Extract video URL from episode page (non-HLS fallback).
 
         Looks for video content in multiple locations:
         - <video> tags with src/source
         - og:video meta tag
         - MP4 URLs in script tags (player configuration)
         - data-video-* attributes
+
+        Note: HLS extraction is handled separately by _extract_hls_url()
         """
         video_url = None
 
@@ -465,7 +630,10 @@ class RedBarPlatform(PlatformAdapter):
             # Check direct src
             video_url = video_elem.get("src")
             if not video_url:
-                # Check source children
+                # Check source children - prefer HLS, then MP4
+                source = video_elem.select_one("source[src*='.m3u8']")
+                if source:
+                    return source.get("src")
                 source = video_elem.select_one("source[src*='.mp4'], source[type*='video']")
                 if source:
                     video_url = source.get("src")
@@ -529,11 +697,17 @@ class RedBarPlatform(PlatformAdapter):
         """Check if there's a next page of episodes."""
         try:
             soup = BeautifulSoup(html, "lxml")
-            # Look for pagination links
+            # Look for pagination links (note: :contains() is not valid CSS, use text search)
             next_link = soup.select_one(
-                "a.next, .pagination a[rel='next'], .pager-next a, a:contains('Next')"
+                "a.next, .pagination a[rel='next'], .pager-next a"
             )
-            return next_link is not None
+            if next_link:
+                return True
+            # Check for any link containing "next" text
+            for link in soup.select("a[href]"):
+                if "next" in link.get_text(strip=True).lower():
+                    return True
+            return False
         except Exception:
             return False
 
@@ -547,12 +721,18 @@ class RedBarPlatform(PlatformAdapter):
             path = parsed.path.strip("/")
 
             # Try various patterns
+            # /shows/episode-name -> episode-name
+            # /archives/episode-name -> episode-name
             # /show/episode-name -> episode-name
             # /episodes/episode-name -> episode-name
-            # /node/123 -> node-123
+            # /music/playlist-name -> music-playlist-name (skip these)
             if path:
+                # Skip non-episode paths
+                if path.startswith("music/"):
+                    return None
+
                 # Remove common prefixes
-                for prefix in ["show/", "episodes/", "episode/", "node/"]:
+                for prefix in ["shows/", "archives/", "show/", "episodes/", "episode/", "node/"]:
                     if path.startswith(prefix):
                         path = path[len(prefix):]
                         break
