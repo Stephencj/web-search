@@ -21,6 +21,8 @@ class FeedItemResponse(BaseModel):
     thumbnail_url: Optional[str]
     duration_seconds: Optional[int]
     view_count: Optional[int]
+    like_count: Optional[int] = None
+    tags: Optional[list[str]] = None
     upload_date: datetime
     categories: Optional[list[str]] = None
 

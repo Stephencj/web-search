@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -122,6 +122,11 @@ class CollectionItem(Base):
     added_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow
     )
+
+    # Watch tracking (for video/podcast items)
+    is_watched: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    watched_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    watch_progress_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Relationship back to collection
     collection: Mapped["Collection"] = relationship(

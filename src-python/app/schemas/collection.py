@@ -23,6 +23,16 @@ class CollectionItemUpdate(BaseModel):
     sort_order: Optional[int] = Field(None, ge=0, description="Item sort order")
 
 
+class CollectionItemWatchedUpdate(BaseModel):
+    """Schema for marking an item as watched/unwatched."""
+    is_watched: bool = Field(..., description="Whether the item is watched")
+
+
+class CollectionItemProgressUpdate(BaseModel):
+    """Schema for updating watch progress on an item."""
+    progress_seconds: int = Field(..., ge=0, description="Watch progress in seconds")
+
+
 class CollectionItemResponse(BaseModel):
     """Schema for collection item response."""
     model_config = ConfigDict(from_attributes=True)
@@ -38,6 +48,10 @@ class CollectionItemResponse(BaseModel):
     video_id: Optional[str]
     sort_order: int
     added_at: datetime
+    # Watch tracking fields
+    is_watched: bool = False
+    watched_at: Optional[datetime] = None
+    watch_progress_seconds: Optional[int] = None
 
 
 class CollectionCreate(BaseModel):

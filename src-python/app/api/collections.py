@@ -18,6 +18,8 @@ from app.schemas.collection import (
     CollectionItemCreate,
     CollectionItemUpdate,
     CollectionItemResponse,
+    CollectionItemWatchedUpdate,
+    CollectionItemProgressUpdate,
     ReorderItemsRequest,
     QuickAddRequest,
     CollectionExport,
@@ -57,6 +59,9 @@ def _item_to_response(item: CollectionItem) -> CollectionItemResponse:
         video_id=item.video_id,
         sort_order=item.sort_order,
         added_at=item.added_at,
+        is_watched=item.is_watched,
+        watched_at=item.watched_at,
+        watch_progress_seconds=item.watch_progress_seconds,
     )
 
 
@@ -438,3 +443,65 @@ async def export_collection(collection_id: int, db: DbSession, user: CurrentUser
             "Content-Disposition": f'attachment; filename="{collection.slug}.json"'
         }
     )
+
+
+# --- Watch Tracking ---
+
+
+@router.put("/{collection_id}/items/{item_id}/watched", response_model=CollectionItemResponse)
+async def update_item_watched(
+    collection_id: int, item_id: int, data: CollectionItemWatchedUpdate, db: DbSession
+) -> CollectionItemResponse:
+    """Mark a collection item as watched or unwatched."""
+    result = await db.execute(
+        select(CollectionItem).where(
+            CollectionItem.id == item_id,
+            CollectionItem.collection_id == collection_id
+        )
+    )
+    item = result.scalar_one_or_none()
+
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Item with id {item_id} not found in collection {collection_id}"
+        )
+
+    item.is_watched = data.is_watched
+    if data.is_watched:
+        item.watched_at = datetime.utcnow()
+    else:
+        item.watched_at = None
+
+    await db.flush()
+    await db.refresh(item)
+
+    logger.info(f"Marked collection item {item_id} as {'watched' if data.is_watched else 'unwatched'}")
+    return _item_to_response(item)
+
+
+@router.put("/{collection_id}/items/{item_id}/progress", response_model=CollectionItemResponse)
+async def update_item_progress(
+    collection_id: int, item_id: int, data: CollectionItemProgressUpdate, db: DbSession
+) -> CollectionItemResponse:
+    """Update watch progress for a collection item."""
+    result = await db.execute(
+        select(CollectionItem).where(
+            CollectionItem.id == item_id,
+            CollectionItem.collection_id == collection_id
+        )
+    )
+    item = result.scalar_one_or_none()
+
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Item with id {item_id} not found in collection {collection_id}"
+        )
+
+    item.watch_progress_seconds = data.progress_seconds
+
+    await db.flush()
+    await db.refresh(item)
+
+    return _item_to_response(item)

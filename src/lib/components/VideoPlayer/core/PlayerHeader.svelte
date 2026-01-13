@@ -8,6 +8,7 @@
 	import { videoPlayer, formatDuration } from '$lib/stores/videoPlayer.svelte';
 	import { getPlatformName, getPlatformColor } from '$lib/utils/embedUrl';
 	import type { StreamInfo } from '$lib/stores/videoPlayer.svelte';
+	import QualitySelector, { type QualityOption } from './QualitySelector.svelte';
 
 	interface Props {
 		compact?: boolean;
@@ -22,6 +23,12 @@
 		showTheaterToggle?: boolean;
 		showPiPToggle?: boolean;
 		showModalToggle?: boolean;
+		// Quality selector props
+		currentQuality?: string | null;
+		availableQualities?: QualityOption[];
+		onQualityChange?: (quality: string) => void;
+		showQualitySelector?: boolean;
+		qualityLoading?: boolean;
 	}
 
 	let {
@@ -36,7 +43,13 @@
 		theaterMode = false,
 		showTheaterToggle = true,
 		showPiPToggle = true,
-		showModalToggle = false
+		showModalToggle = false,
+		// Quality selector defaults
+		currentQuality = null,
+		availableQualities = [],
+		onQualityChange,
+		showQualitySelector = false,
+		qualityLoading = false
 	}: Props = $props();
 
 	const video = $derived(videoPlayer.currentVideo);
@@ -100,6 +113,15 @@
 		{/if}
 	</div>
 	<div class="header-right">
+		{#if showQualitySelector && availableQualities.length > 0 && onQualityChange && !compact}
+			<QualitySelector
+				{currentQuality}
+				{availableQualities}
+				{onQualityChange}
+				isLoading={qualityLoading}
+				{compact}
+			/>
+		{/if}
 		{#if streamInfo?.stream_url && onToggleDirectStream && !compact}
 			<button
 				class="header-btn stream-toggle"

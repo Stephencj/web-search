@@ -105,7 +105,7 @@
       const playableItems = $currentCollection.items.filter(
         item => item.item_type === 'video' || item.item_type === 'podcast_episode'
       );
-      const playQueue = playableItems.map(item => collectionItemToVideoItem(item));
+      const playQueue = playableItems.map(item => collectionItemToVideoItem(item, $currentCollection!.id));
 
       // Find the index of the clicked item in the playable array
       const playIndex = playableItems.findIndex(item => item.id === clickedItem.id);
