@@ -78,6 +78,8 @@
 	const theaterMode = $derived(playbackPreferences.theaterMode);
 	const savedPlayhead = $derived(videoPlayer.savedPlayhead);
 	const shouldResumePlayback = $derived(videoPlayer.shouldResumePlayback);
+	const isNativePiPActive = $derived(videoPlayer.isNativePiPActive);
+	const isHiddenForNativePiP = $derived(videoPlayer.isHiddenForNativePiP);
 
 	// Callbacks for strategy components
 	const strategyCallbacks: PlaybackCallbacks = {
@@ -187,6 +189,13 @@
 	}
 
 	function handleClose() {
+		// If native PiP is active, minimize to pip mode instead of closing
+		// This allows the video to continue playing in native PiP while browsing
+		if (isNativePiPActive) {
+			handleMinimizeToNativePiP();
+			return;
+		}
+
 		// Save final progress
 		const time = controls.getCurrentTime();
 		if (time > 0) {
@@ -201,6 +210,13 @@
 		streamInfo = null;
 		useDirectStream = false;
 		preferredStrategy = undefined;
+	}
+
+	function handleMinimizeToNativePiP() {
+		// Hide the modal overlay but keep video element alive for native PiP
+		// This allows the video to continue playing in iOS's native PiP window
+		// while the user browses other content
+		videoPlayer.setHiddenForNativePiP(true);
 	}
 
 	function handleSwitchToPiP() {
@@ -374,6 +390,7 @@
 {#if isOpen && video}
 	<div
 		class="player-overlay"
+		class:hidden-for-pip={isHiddenForNativePiP}
 		onclick={handleBackdropClick}
 		role="dialog"
 		aria-modal="true"
@@ -441,6 +458,12 @@
 		justify-content: center;
 		z-index: 1000;
 		padding: var(--spacing-lg);
+	}
+
+	/* Hide modal visually but keep video element alive for native PiP */
+	.player-overlay.hidden-for-pip {
+		visibility: hidden;
+		pointer-events: none;
 	}
 
 	.player-modal {

@@ -163,6 +163,10 @@ function createVideoPlayerStore() {
   let duration = $state<number>(0);
   // Flag to indicate playback should continue after mode switch
   let shouldResumePlayback = $state<boolean>(false);
+  // Track native browser PiP state (iOS Safari)
+  let isNativePiPActive = $state<boolean>(false);
+  // When true, modal is hidden but video element kept alive for native PiP
+  let isHiddenForNativePiP = $state<boolean>(false);
 
   // Helper to dispatch custom events for player control
   function dispatchPlayerEvent(eventName: string, detail?: unknown) {
@@ -267,11 +271,35 @@ function createVideoPlayerStore() {
     get shouldResumePlayback() {
       return shouldResumePlayback;
     },
+    get isNativePiPActive() {
+      return isNativePiPActive;
+    },
+    get isHiddenForNativePiP() {
+      return isHiddenForNativePiP;
+    },
 
     /**
      * Initialize media session (call once on app mount)
      */
     initMediaSession,
+
+    /**
+     * Set native PiP state (called by NativePiPTracker)
+     */
+    setNativePiPActive(active: boolean) {
+      isNativePiPActive = active;
+      // Reset hidden state when native PiP exits
+      if (!active) {
+        isHiddenForNativePiP = false;
+      }
+    },
+
+    /**
+     * Hide modal but keep video alive for native PiP
+     */
+    setHiddenForNativePiP(hidden: boolean) {
+      isHiddenForNativePiP = hidden;
+    },
 
     /**
      * Update playback state (called by active player)

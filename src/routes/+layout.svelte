@@ -4,6 +4,7 @@
   import { VideoPlayerModal, PiPPlayer } from '$lib/components/VideoPlayer';
   import BackgroundPlaybackHandler from '$lib/components/VideoPlayer/BackgroundPlaybackHandler.svelte';
   import MiniPlayerBar from '$lib/components/VideoPlayer/MiniPlayerBar.svelte';
+  import NativePiPTracker from '$lib/components/VideoPlayer/NativePiPTracker.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { themeStore } from '$lib/stores/theme.svelte';
@@ -117,6 +118,9 @@
 
     <!-- Background Playback Handler (no UI) -->
     <BackgroundPlaybackHandler />
+
+    <!-- Native PiP Tracker (no UI) - tracks iOS Safari native PiP state -->
+    <NativePiPTracker />
   </div>
 {/if}
 
