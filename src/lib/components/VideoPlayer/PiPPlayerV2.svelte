@@ -40,7 +40,9 @@
 
 	// Derived values
 	const video = $derived(videoPlayer.currentVideo);
-	const isOpen = $derived(videoPlayer.isPiP && video !== null);
+	const isNativePiPActive = $derived(videoPlayer.isNativePiPActive);
+	// Don't render PiP player when native PiP is active - let iOS handle it
+	const isOpen = $derived(videoPlayer.isPiP && video !== null && !isNativePiPActive);
 	const videoKey = $derived(videoPlayer.videoKey);
 	const savedPlayhead = $derived(videoPlayer.savedPlayhead);
 	const shouldResumePlayback = $derived(videoPlayer.shouldResumePlayback);

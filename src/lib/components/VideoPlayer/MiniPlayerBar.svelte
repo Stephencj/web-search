@@ -14,9 +14,13 @@
 	const isPlaying = $derived(videoPlayer.isPlaying);
 	const currentTime = $derived(videoPlayer.currentTime);
 	const duration = $derived(videoPlayer.duration);
+	const isNativePiPActive = $derived(videoPlayer.isNativePiPActive);
+	const isHiddenForNativePiP = $derived(videoPlayer.isHiddenForNativePiP);
 
-	// Show bar when video exists and modal is closed (pip mode or playing in background)
-	const isVisible = $derived(video !== null && mode === 'pip');
+	// Show bar when:
+	// - Video exists and in pip mode, OR
+	// - Modal is hidden for native PiP (user minimized while native PiP active)
+	const isVisible = $derived(video !== null && (mode === 'pip' || isHiddenForNativePiP));
 
 	// Progress percentage
 	const progress = $derived(duration > 0 ? (currentTime / duration) * 100 : 0);
@@ -36,10 +40,29 @@
 	}
 
 	function handleOpenModal() {
+		// If modal is hidden for native PiP, just restore visibility
+		if (isHiddenForNativePiP) {
+			// Exit native PiP first
+			if (document.pictureInPictureElement) {
+				document.exitPictureInPicture().catch(() => {});
+			}
+			videoPlayer.setHiddenForNativePiP(false);
+			return;
+		}
+		// Otherwise switch from pip mode to modal
+		if (document.pictureInPictureElement) {
+			document.exitPictureInPicture().catch(() => {});
+		}
 		videoPlayer.switchToModal();
 	}
 
 	function handleClose() {
+		// Exit native PiP if active
+		if (document.pictureInPictureElement) {
+			document.exitPictureInPicture().catch(() => {});
+		}
+		// Reset hidden state and close
+		videoPlayer.setHiddenForNativePiP(false);
 		videoPlayer.close();
 	}
 
