@@ -112,8 +112,9 @@
 			return;
 		}
 
-		// Only fetch streams for YouTube and Red Bar currently
-		if (video.platform !== 'youtube' && video.platform !== 'redbar') return;
+		// Platforms that support stream extraction
+		const STREAM_PLATFORMS = ['youtube', 'rumble', 'odysee', 'bitchute', 'dailymotion', 'redbar'];
+		if (!STREAM_PLATFORMS.includes(video.platform)) return;
 
 		const cached = streamCache.getSync(video.platform, video.videoId);
 		if (cached) {
@@ -365,5 +366,25 @@
 	.size-toggle:hover {
 		color: var(--color-text);
 		background: var(--color-bg-secondary);
+	}
+
+	/* On mobile, hide floating PiP window but keep video playing.
+	   MiniPlayerBar will show instead for controls.
+	   Use clip-path to hide visually while keeping video active. */
+	@media (max-width: 768px) {
+		.pip-container {
+			clip-path: inset(100%);
+			clip: rect(0, 0, 0, 0);
+			height: 1px;
+			width: 1px;
+			margin: -1px;
+			padding: 0;
+			border: 0;
+			overflow: hidden;
+			position: absolute;
+			/* Keep video element sized for proper playback */
+			opacity: 0;
+			pointer-events: none;
+		}
 	}
 </style>

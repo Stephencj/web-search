@@ -78,6 +78,32 @@
     })
   );
 
+  // State for expanded descriptions
+  let expandedDescriptions = $state<Set<number>>(new Set());
+
+  function toggleDescription(itemId: number, event: Event) {
+    event.stopPropagation();
+    const newSet = new Set(expandedDescriptions);
+    if (newSet.has(itemId)) {
+      newSet.delete(itemId);
+    } else {
+      newSet.add(itemId);
+    }
+    expandedDescriptions = newSet;
+  }
+
+  // Format view/like counts with abbreviations (1.2M, 500K, etc.)
+  function formatCount(count: number | null | undefined): string {
+    if (count === null || count === undefined) return '';
+    if (count >= 1_000_000) {
+      return `${(count / 1_000_000).toFixed(1)}M`;
+    }
+    if (count >= 1_000) {
+      return `${(count / 1_000).toFixed(1)}K`;
+    }
+    return count.toLocaleString();
+  }
+
   // Syncing
   let syncing = $state(false);
 
@@ -652,13 +678,52 @@
             <div class="card-content">
               <h3 class="video-title" title={item.title}>{item.title}</h3>
               {#if item.description}
-                <p class="video-description">{item.description.slice(0, 100)}{item.description.length > 100 ? '...' : ''}</p>
+                <div class="description-wrapper">
+                  {#if expandedDescriptions.has(item.id)}
+                    <p class="video-description expanded">{item.description}</p>
+                    <button class="expand-btn" onclick={(e) => toggleDescription(item.id, e)}>
+                      Show less
+                    </button>
+                  {:else}
+                    <p class="video-description">{item.description.slice(0, 100)}{item.description.length > 100 ? '...' : ''}</p>
+                    {#if item.description.length > 100}
+                      <button class="expand-btn" onclick={(e) => toggleDescription(item.id, e)}>
+                        Show more
+                      </button>
+                    {/if}
+                  {/if}
+                </div>
               {/if}
               <div class="video-meta">
                 <span class="channel-name">{item.channel_name}</span>
                 <span class="separator">·</span>
                 <span class="upload-date">{formatTimeAgo(item.upload_date)}</span>
+                {#if item.view_count}
+                  <span class="separator">·</span>
+                  <span class="view-count" title="{item.view_count.toLocaleString()} views">
+                    {formatCount(item.view_count)} views
+                  </span>
+                {/if}
+                {#if item.like_count}
+                  <span class="separator">·</span>
+                  <span class="like-count" title="{item.like_count.toLocaleString()} likes">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
+                      <path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/>
+                    </svg>
+                    {formatCount(item.like_count)}
+                  </span>
+                {/if}
               </div>
+              {#if item.tags && item.tags.length > 0}
+                <div class="video-tags">
+                  {#each item.tags.slice(0, 5) as tag}
+                    <span class="tag-chip">{tag}</span>
+                  {/each}
+                  {#if item.tags.length > 5}
+                    <span class="tag-more">+{item.tags.length - 5} more</span>
+                  {/if}
+                </div>
+              {/if}
               <div class="card-actions">
                 <span class="platform-badge" style="background: {getPlatformColor(item.platform)}">
                   {getPlatformIcon(item.platform)} {item.platform}
@@ -1144,6 +1209,74 @@
     color: var(--color-text-secondary);
     line-height: 1.4;
     margin: 0 0 var(--spacing-xs);
+  }
+
+  .description-wrapper {
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .video-description.expanded {
+    display: block;
+    -webkit-line-clamp: unset;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .expand-btn {
+    background: none;
+    border: none;
+    color: var(--color-primary);
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 0;
+    margin-top: 2px;
+  }
+
+  .expand-btn:hover {
+    text-decoration: underline;
+  }
+
+  .view-count,
+  .like-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .like-count svg {
+    opacity: 0.7;
+  }
+
+  .video-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .tag-chip {
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tag-chip:hover {
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .tag-more {
+    font-size: 0.65rem;
+    color: var(--color-text-secondary);
+    font-style: italic;
   }
 
   .video-meta {

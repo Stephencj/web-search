@@ -38,6 +38,9 @@ export interface StrategyProps {
 
 export type StrategyType = 'embed' | 'youtube_api' | 'direct_stream' | 'audio' | 'hls';
 
+// Platforms that support stream extraction via yt-dlp
+const STREAM_PLATFORMS = ['youtube', 'rumble', 'odysee', 'bitchute', 'dailymotion'];
+
 /**
  * Get the best strategy for a video
  */
@@ -59,13 +62,13 @@ export function getBestStrategy(video: VideoItem, hasStreamInfo: boolean, stream
 		return 'audio';
 	}
 
-	// YouTube with cached stream - use direct
-	if (video.platform === 'youtube' && hasStreamInfo) {
+	// Platforms with stream extraction support - use direct stream when available
+	if (STREAM_PLATFORMS.includes(video.platform) && hasStreamInfo && streamInfo?.stream_url) {
 		return 'direct_stream';
 	}
 
-	// YouTube - use embed for instant start
-	if (video.platform === 'youtube') {
+	// Platforms with stream extraction but no cached stream yet - use embed for instant start
+	if (STREAM_PLATFORMS.includes(video.platform) && video.embedConfig.supportsEmbed) {
 		return 'embed';
 	}
 

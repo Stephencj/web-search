@@ -155,6 +155,10 @@ export interface CollectionItem {
   video_id: string | null;
   sort_order: number;
   added_at: string;
+  // Watch tracking fields
+  is_watched: boolean;
+  watched_at: string | null;
+  watch_progress_seconds: number | null;
 }
 
 export interface Collection {
@@ -218,6 +222,8 @@ export interface FeedItem {
   thumbnail_url: string | null;
   duration_seconds: number | null;
   view_count: number | null;
+  like_count: number | null;
+  tags: string[] | null;
   upload_date: string;
   categories: string[] | null;
   // Podcast/audio fields
@@ -1022,6 +1028,28 @@ class ApiClient {
     return this.request('/collections/quick-add', {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  }
+
+  async markCollectionItemWatched(
+    collectionId: number,
+    itemId: number,
+    isWatched: boolean
+  ): Promise<CollectionItem> {
+    return this.request(`/collections/${collectionId}/items/${itemId}/watched`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_watched: isWatched }),
+    });
+  }
+
+  async updateCollectionItemProgress(
+    collectionId: number,
+    itemId: number,
+    progressSeconds: number
+  ): Promise<CollectionItem> {
+    return this.request(`/collections/${collectionId}/items/${itemId}/progress`, {
+      method: 'PUT',
+      body: JSON.stringify({ progress_seconds: progressSeconds }),
     });
   }
 

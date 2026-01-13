@@ -37,6 +37,7 @@ export interface VideoItem {
   // For progress tracking
   sourceType?: 'feed' | 'saved' | 'discover' | 'offline' | 'collection';
   sourceId?: number; // Database ID for feed/saved/collection items
+  collectionId?: number; // Collection ID for collection items
   watchProgress?: number; // Existing progress in seconds
   // Content type for mixed queues (video + audio)
   contentType?: 'video' | 'audio';
@@ -47,6 +48,11 @@ export interface VideoItem {
   // Offline playback - direct blob URL
   offlineStreamUrl?: string | null;
   isOffline?: boolean;
+  // Metadata for display
+  description?: string | null;
+  viewCount?: number | null;
+  likeCount?: number | null;
+  uploadDate?: string | null;
 }
 
 export interface StreamInfo {
@@ -125,12 +131,15 @@ export function getCachedStreamInfo(platform: string, videoId: string): StreamIn
   return null;
 }
 
+// Platforms that support stream extraction via yt-dlp
+const STREAM_PLATFORMS = ['youtube', 'rumble', 'odysee', 'bitchute', 'dailymotion'];
+
 /**
  * Pre-fetch stream info for upcoming videos
  */
 export async function prefetchStreams(videos: VideoItem[]): Promise<void> {
   const fetchPromises = videos
-    .filter(v => v.platform === 'youtube') // Only YouTube supports direct streams
+    .filter(v => STREAM_PLATFORMS.includes(v.platform))
     .map(v => fetchStreamInfo(v.platform, v.videoId));
 
   await Promise.allSettled(fetchPromises);
@@ -408,6 +417,21 @@ function createVideoPlayerStore() {
     },
 
     /**
+     * Jump to specific video in queue by index
+     */
+    goToIndex(index: number) {
+      if (index >= 0 && index < queue.length && index !== currentIndex) {
+        currentIndex = index;
+        currentVideo = queue[currentIndex];
+        savedPlayhead = 0;
+        videoKey++;
+        shouldResumePlayback = true;
+        return true;
+      }
+      return false;
+    },
+
+    /**
      * Switch current video to PiP mode (preserves playhead via savePlayhead call)
      */
     switchToPiP() {
@@ -494,6 +518,11 @@ export function feedItemToVideoItem(item: FeedItem): VideoItem {
     contentType: isPodcast ? 'audio' : 'video',
     audioUrl: item.audio_url,
     videoStreamUrl: item.video_stream_url,
+    // Metadata for display
+    description: item.description,
+    viewCount: item.view_count,
+    likeCount: item.like_count,
+    uploadDate: item.upload_date,
   };
 }
 
@@ -590,7 +619,7 @@ export async function openSavedVideo(video: SavedVideo): Promise<void> {
  * Convert CollectionItem to VideoItem
  * Handles video, podcast_episode, and image (as video fallback) item types
  */
-export function collectionItemToVideoItem(item: CollectionItem): VideoItem {
+export function collectionItemToVideoItem(item: CollectionItem, collectionId: number): VideoItem {
   // Check both item_type and embed_type for podcast detection (handles legacy saves)
   const isPodcast = item.item_type === 'podcast_episode' || item.embed_type === 'podcast';
 
@@ -617,9 +646,11 @@ export function collectionItemToVideoItem(item: CollectionItem): VideoItem {
     contentType: isPodcast ? 'audio' : 'video',
     // For podcast episodes, the URL is the audio file
     audioUrl: isPodcast ? item.url : null,
-    // Track progress for collection items (stored locally)
+    // Track progress for collection items
     sourceType: 'collection',
     sourceId: item.id,
+    collectionId,
+    watchProgress: item.watch_progress_seconds ?? undefined,
   };
 }
 

@@ -3,6 +3,7 @@
   import Sidebar from '$lib/components/Sidebar.svelte';
   import { VideoPlayerModal, PiPPlayer } from '$lib/components/VideoPlayer';
   import BackgroundPlaybackHandler from '$lib/components/VideoPlayer/BackgroundPlaybackHandler.svelte';
+  import MiniPlayerBar from '$lib/components/VideoPlayer/MiniPlayerBar.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { themeStore } from '$lib/stores/theme.svelte';
@@ -108,8 +109,11 @@
     <!-- Global Video Player Modal -->
     <VideoPlayerModal />
 
-    <!-- Picture-in-Picture Player -->
+    <!-- Picture-in-Picture Player (desktop) -->
     <PiPPlayer />
+
+    <!-- Mini Player Bar (mobile-optimized, shows in pip mode) -->
+    <MiniPlayerBar />
 
     <!-- Background Playback Handler (no UI) -->
     <BackgroundPlaybackHandler />

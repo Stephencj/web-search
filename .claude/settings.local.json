@@ -122,7 +122,14 @@
       "Bash(npm run build:*)",
       "Bash(tr:*)",
       "Bash(sudo -S docker-compose exec -T app curl:*)",
-      "Bash(sudo -S docker-compose ps:*)"
+      "Bash(sudo -S docker-compose ps:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(alembic upgrade:*)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(pip3 list:*)",
+      "Bash(source venv/bin/activate)",
+      "Bash(./deploy.sh)",
+      "Bash(kill:*)"
     ]
   }
 }

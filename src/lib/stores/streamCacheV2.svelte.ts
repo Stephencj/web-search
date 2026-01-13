@@ -551,6 +551,9 @@ class MultiTierStreamCache {
 // Singleton instance
 export const streamCache = new MultiTierStreamCache();
 
+// Platforms that support stream extraction
+const STREAM_PLATFORMS = ['youtube', 'rumble', 'odysee', 'bitchute', 'dailymotion', 'redbar'];
+
 /**
  * Fetch stream info with caching
  * Returns cached if available, otherwise fetches and caches
@@ -559,55 +562,75 @@ export async function fetchStreamInfo(
 	platform: string,
 	videoId: string,
 	priority: CachePriority = 'normal',
-	videoUrl?: string
+	videoUrl?: string,
+	quality?: string
 ): Promise<StreamInfo | null> {
-	// Check cache first
-	const cached = await streamCache.get(platform, videoId);
-	if (cached) {
-		return cached;
+	// If quality is specified, skip cache and fetch directly
+	if (!quality) {
+		// Check cache first
+		const cached = await streamCache.get(platform, videoId);
+		if (cached) {
+			return cached;
+		}
+
+		// Check if already extracting
+		const state = streamCache.getExtractionStatus(platform, videoId);
+		if (state?.status === 'extracting' && state.promise) {
+			return state.promise;
+		}
 	}
 
-	// Check if already extracting
-	const state = streamCache.getExtractionStatus(platform, videoId);
-	if (state?.status === 'extracting' && state.promise) {
-		return state.promise;
-	}
-
-	// Only YouTube and Red Bar support direct streams currently
-	if (platform !== 'youtube' && platform !== 'redbar') {
+	// Check if platform supports stream extraction
+	if (!STREAM_PLATFORMS.includes(platform)) {
 		return null;
 	}
 
 	// Start extraction
 	const promise = (async (): Promise<StreamInfo | null> => {
 		try {
-			// Build URL with optional video_url query param for Red Bar
+			// Build URL with query params
 			let url = `/api/stream/${platform}/${videoId}`;
+			const params = new URLSearchParams();
 			if (videoUrl) {
-				url += `?video_url=${encodeURIComponent(videoUrl)}`;
+				params.set('video_url', videoUrl);
+			}
+			if (quality && quality !== 'auto') {
+				params.set('quality', quality);
+			}
+			if (params.toString()) {
+				url += `?${params.toString()}`;
 			}
 
 			const response = await fetch(url);
 			if (response.ok) {
 				const info: StreamInfo = await response.json();
-				await streamCache.set(platform, videoId, info, priority);
+				// Only cache if no specific quality was requested (default quality)
+				if (!quality) {
+					await streamCache.set(platform, videoId, info, priority);
+				}
 				return info;
 			}
-			streamCache.setExtractionStatus(platform, videoId, 'failed', undefined, 'HTTP error');
+			if (!quality) {
+				streamCache.setExtractionStatus(platform, videoId, 'failed', undefined, 'HTTP error');
+			}
 			return null;
 		} catch (e) {
-			streamCache.setExtractionStatus(
-				platform,
-				videoId,
-				'failed',
-				undefined,
-				e instanceof Error ? e.message : 'Unknown error'
-			);
+			if (!quality) {
+				streamCache.setExtractionStatus(
+					platform,
+					videoId,
+					'failed',
+					undefined,
+					e instanceof Error ? e.message : 'Unknown error'
+				);
+			}
 			return null;
 		}
 	})();
 
-	streamCache.setExtractionStatus(platform, videoId, 'extracting', promise);
+	if (!quality) {
+		streamCache.setExtractionStatus(platform, videoId, 'extracting', promise);
+	}
 
 	return promise;
 }

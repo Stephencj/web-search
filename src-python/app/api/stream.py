@@ -21,6 +21,9 @@ _active_extractions: dict[str, float] = {}
 CACHE_TTL_SECONDS = 5 * 60 * 60  # 5 hours
 MAX_CACHE_ENTRIES = 100
 
+# Platforms that support stream extraction via yt-dlp
+SUPPORTED_STREAM_PLATFORMS = {"youtube", "rumble", "odysee", "bitchute", "dailymotion", "redbar"}
+
 
 class StreamInfo(BaseModel):
     """Response schema for stream info."""
@@ -93,30 +96,74 @@ async def get_stream_info(
     if platform == "redbar":
         return await _get_redbar_stream(video_id, audio_only, video_url, db)
 
-    if platform != "youtube":
+    # Check if platform is supported
+    if platform not in SUPPORTED_STREAM_PLATFORMS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Streaming not supported for platform: {platform}",
         )
 
-    oauth_service = get_oauth_service()
-    account = await oauth_service.get_account(db, platform)
+    # Handle YouTube with OAuth support
+    if platform == "youtube":
+        oauth_service = get_oauth_service()
+        account = await oauth_service.get_account(db, platform)
 
-    # Get access token if account exists
-    access_token = None
-    is_premium = False
-    if account:
-        access_token = await oauth_service.get_valid_access_token(db, account)
-        is_premium = account.is_premium
+        # Get access token if account exists
+        access_token = None
+        is_premium = False
+        if account:
+            access_token = await oauth_service.get_valid_access_token(db, account)
+            is_premium = account.is_premium
 
-    # Build video URL
-    video_url = f"https://www.youtube.com/watch?v={video_id}"
+        # Build video URL
+        yt_video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-    # Extract stream info using yt-dlp
+        # Extract stream info using yt-dlp
+        try:
+            stream_info = await _extract_youtube_stream(
+                video_url=yt_video_url,
+                access_token=access_token,
+                quality=quality,
+                audio_only=audio_only,
+            )
+
+            return StreamInfo(
+                video_id=video_id,
+                platform=platform,
+                title=stream_info.get("title"),
+                stream_url=stream_info.get("stream_url"),
+                audio_url=stream_info.get("audio_url"),
+                thumbnail_url=stream_info.get("thumbnail"),
+                duration_seconds=stream_info.get("duration"),
+                is_authenticated=access_token is not None,
+                is_premium=is_premium,
+                quality=stream_info.get("quality"),
+                format=stream_info.get("format"),
+                error=stream_info.get("error"),
+            )
+
+        except Exception as e:
+            return StreamInfo(
+                video_id=video_id,
+                platform=platform,
+                is_authenticated=access_token is not None,
+                is_premium=is_premium,
+                error=str(e),
+            )
+
+    # Handle other platforms (Rumble, Odysee, BitChute, Dailymotion) with generic extraction
     try:
-        stream_info = await _extract_youtube_stream(
-            video_url=video_url,
-            access_token=access_token,
+        platform_video_url = _build_video_url(platform, video_id, video_url)
+        if not platform_video_url:
+            return StreamInfo(
+                video_id=video_id,
+                platform=platform,
+                error=f"Could not build video URL for platform: {platform}",
+            )
+
+        stream_info = await _extract_generic_stream(
+            video_url=platform_video_url,
+            platform=platform,
             quality=quality,
             audio_only=audio_only,
         )
@@ -129,8 +176,8 @@ async def get_stream_info(
             audio_url=stream_info.get("audio_url"),
             thumbnail_url=stream_info.get("thumbnail"),
             duration_seconds=stream_info.get("duration"),
-            is_authenticated=access_token is not None,
-            is_premium=is_premium,
+            is_authenticated=False,
+            is_premium=False,
             quality=stream_info.get("quality"),
             format=stream_info.get("format"),
             error=stream_info.get("error"),
@@ -140,8 +187,6 @@ async def get_stream_info(
         return StreamInfo(
             video_id=video_id,
             platform=platform,
-            is_authenticated=access_token is not None,
-            is_premium=is_premium,
             error=str(e),
         )
 
@@ -157,20 +202,29 @@ async def get_stream_formats(
 
     Returns list of available qualities and formats.
     """
-    if platform != "youtube":
+    if platform not in SUPPORTED_STREAM_PLATFORMS or platform == "redbar":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Format listing not supported for platform: {platform}",
         )
 
-    oauth_service = get_oauth_service()
-    account = await oauth_service.get_account(db, platform)
+    # Build video URL
+    video_url = _build_video_url(platform, video_id)
+    if not video_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not build video URL for platform: {platform}",
+        )
 
+    # For YouTube, try to get OAuth token
     access_token = None
-    if account:
-        access_token = await oauth_service.get_valid_access_token(db, account)
-
-    video_url = f"https://www.youtube.com/watch?v={video_id}"
+    is_authenticated = False
+    if platform == "youtube":
+        oauth_service = get_oauth_service()
+        account = await oauth_service.get_account(db, platform)
+        if account:
+            access_token = await oauth_service.get_valid_access_token(db, account)
+            is_authenticated = access_token is not None
 
     try:
         formats = await _list_youtube_formats(video_url, access_token)
@@ -178,7 +232,7 @@ async def get_stream_formats(
             video_id=video_id,
             platform=platform,
             formats=formats,
-            is_authenticated=access_token is not None,
+            is_authenticated=is_authenticated,
         )
     except Exception as e:
         raise HTTPException(
@@ -268,10 +322,10 @@ async def start_extraction(
     Returns immediately with a poll URL. Use /status to check when done.
     This enables instant-start playback: start with embed, upgrade when ready.
     """
-    if platform != "youtube":
+    if platform not in SUPPORTED_STREAM_PLATFORMS or platform == "redbar":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Streaming not supported for platform: {platform}",
+            detail=f"Background extraction not supported for platform: {platform}",
         )
 
     cache_key = _get_cache_key(platform, video_id)
@@ -295,28 +349,39 @@ async def start_extraction(
             poll_url=poll_url,
         )
 
-    # Get OAuth token if available
-    oauth_service = get_oauth_service()
-    account = await oauth_service.get_account(db, platform)
+    # Get OAuth token if available (YouTube only)
     access_token = None
     is_premium = False
-    if account:
-        access_token = await oauth_service.get_valid_access_token(db, account)
-        is_premium = account.is_premium
+    if platform == "youtube":
+        oauth_service = get_oauth_service()
+        account = await oauth_service.get_account(db, platform)
+        if account:
+            access_token = await oauth_service.get_valid_access_token(db, account)
+            is_premium = account.is_premium
 
     # Mark as extracting
     _active_extractions[cache_key] = time.time()
 
+    # Build video URL
+    video_url = _build_video_url(platform, video_id)
+
     # Start background extraction
     async def do_extraction():
         try:
-            video_url = f"https://www.youtube.com/watch?v={video_id}"
-            stream_info = await _extract_youtube_stream(
-                video_url=video_url,
-                access_token=access_token,
-                quality=quality,
-                audio_only=False,
-            )
+            if platform == "youtube":
+                stream_info = await _extract_youtube_stream(
+                    video_url=video_url,
+                    access_token=access_token,
+                    quality=quality,
+                    audio_only=False,
+                )
+            else:
+                stream_info = await _extract_generic_stream(
+                    video_url=video_url,
+                    platform=platform,
+                    quality=quality,
+                    audio_only=False,
+                )
 
             # Cache the result
             result = StreamInfo(
@@ -360,6 +425,125 @@ async def start_extraction(
         status="started",
         poll_url=poll_url,
     )
+
+
+def _build_video_url(platform: str, video_id: str, original_url: Optional[str] = None) -> str:
+    """
+    Build full video URL for yt-dlp extraction.
+
+    Args:
+        platform: Platform identifier
+        video_id: Video ID on the platform
+        original_url: Original URL if available (preferred)
+
+    Returns:
+        Full video URL for extraction
+    """
+    if original_url:
+        return original_url
+
+    url_templates = {
+        "youtube": f"https://www.youtube.com/watch?v={video_id}",
+        "rumble": f"https://rumble.com/{video_id}",
+        "odysee": f"https://odysee.com/{video_id}",
+        "bitchute": f"https://www.bitchute.com/video/{video_id}/",
+        "dailymotion": f"https://www.dailymotion.com/video/{video_id}",
+    }
+    return url_templates.get(platform, "")
+
+
+async def _extract_generic_stream(
+    video_url: str,
+    platform: str,
+    quality: str = "best",
+    audio_only: bool = False,
+) -> dict:
+    """
+    Extract stream URL for non-YouTube platforms using yt-dlp.
+
+    Works for platforms like Rumble, Odysee, BitChute, Dailymotion.
+    These platforms typically have simpler format structures than YouTube.
+
+    Args:
+        video_url: Full video URL
+        platform: Platform identifier (for logging)
+        quality: Desired quality (best, 1080p, 720p, 480p, worst)
+        audio_only: Get audio stream only
+
+    Returns:
+        Dict with stream info
+    """
+    import yt_dlp
+    from loguru import logger
+
+    logger.debug(f"Extracting stream for {platform}: {video_url}")
+
+    # Format selection - simpler than YouTube since most platforms have combined streams
+    if audio_only:
+        format_str = "bestaudio/best"
+    elif quality == "1080p":
+        format_str = "best[height<=1080]/best"
+    elif quality == "720p":
+        format_str = "best[height<=720]/best"
+    elif quality == "480p":
+        format_str = "best[height<=480]/best"
+    elif quality == "worst":
+        format_str = "worst"
+    else:
+        format_str = "best"
+
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "format": format_str,
+        "skip_download": True,
+    }
+
+    def extract():
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=False)
+                if not info:
+                    return {"error": "Failed to extract video info"}
+
+                result = {
+                    "title": info.get("title"),
+                    "thumbnail": info.get("thumbnail"),
+                    "duration": info.get("duration"),
+                }
+
+                # Get stream URL - most platforms use combined format
+                if "url" in info:
+                    result["stream_url"] = info["url"]
+                    height = info.get("height")
+                    result["quality"] = f"{height}p" if height else info.get("format_note") or "best"
+                    result["format"] = info.get("ext")
+                    result["height"] = height
+                elif "formats" in info and info["formats"]:
+                    # Find best available format
+                    sorted_formats = sorted(
+                        [f for f in info["formats"] if f.get("url")],
+                        key=lambda f: (f.get("height") or 0, f.get("tbr") or 0),
+                        reverse=True
+                    )
+                    if sorted_formats:
+                        fmt = sorted_formats[0]
+                        result["stream_url"] = fmt.get("url")
+                        height = fmt.get("height")
+                        result["quality"] = f"{height}p" if height else fmt.get("format_note") or "best"
+                        result["format"] = fmt.get("ext")
+                        result["height"] = height
+                else:
+                    return {"error": "No stream URL found in extraction result"}
+
+                return result
+
+        except Exception as e:
+            logger.error(f"Failed to extract stream for {platform}: {e}")
+            return {"error": str(e)}
+
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, extract)
 
 
 async def _extract_youtube_stream(

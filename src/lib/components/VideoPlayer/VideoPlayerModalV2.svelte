@@ -13,11 +13,14 @@
 	import { playbackPreferences } from '$lib/stores/playbackPreferences.svelte';
 	import { streamCache, fetchStreamInfo } from '$lib/stores/streamCacheV2.svelte';
 	import { prefetchQueueVideos } from '$lib/stores/prefetchQueue.svelte';
+	import { qualityPreferences, type QualityLevel } from '$lib/stores/qualityPreferences.svelte';
 	import { useProgressTracking } from './composables/useProgressTracking.svelte';
 	import { usePlaybackControl } from './composables/usePlaybackControl.svelte';
 	import { PlayerContent, PlayerHeader, PlayerInfo } from './core';
 	import ChapterList from './ChapterList.svelte';
+	import QueuePanel from './QueuePanel.svelte';
 	import type { StrategyType, PlaybackCallbacks } from './strategies/types';
+	import type { QualityOption } from './core/QualitySelector.svelte';
 
 	interface Props {
 		onMarkWatched?: () => void;
@@ -37,6 +40,29 @@
 
 	// Current playback time for chapter highlighting
 	let currentPlaybackTime = $state(0);
+
+	// Quality selector state
+	let currentQuality = $state<string | null>(null);
+	let qualityLoading = $state(false);
+
+	// Build available quality options
+	const availableQualities = $derived.by(() => {
+		if (!video || !streamInfo?.stream_url) return [] as QualityOption[];
+
+		// Standard quality options for platforms supporting yt-dlp
+		const STREAM_PLATFORMS_CHECK = ['youtube', 'rumble', 'odysee', 'bitchute', 'dailymotion'];
+		if (!STREAM_PLATFORMS_CHECK.includes(video.platform)) return [] as QualityOption[];
+
+		const options: QualityOption[] = [
+			{ value: 'auto', label: 'Auto' },
+			{ value: 'best', label: 'Best', height: 9999 },
+			{ value: '1080p', label: '1080p', height: 1080 },
+			{ value: '720p', label: '720p', height: 720 },
+			{ value: '480p', label: '480p', height: 480 },
+		];
+
+		return options;
+	});
 
 	// Composables
 	const progress = useProgressTracking(
@@ -101,6 +127,9 @@
 		}
 	};
 
+	// Platforms that support stream extraction
+	const STREAM_PLATFORMS = ['youtube', 'rumble', 'odysee', 'bitchute', 'dailymotion', 'redbar'];
+
 	/**
 	 * Fetch stream info for the current video
 	 */
@@ -122,17 +151,21 @@
 				quality: 'offline',
 			};
 			useDirectStream = true;
+			currentQuality = 'offline';
 			return;
 		}
 
-		// Only fetch streams for YouTube and Red Bar currently
-		if (video.platform !== 'youtube' && video.platform !== 'redbar') return;
+		// Only fetch streams for supported platforms
+		if (!STREAM_PLATFORMS.includes(video.platform)) return;
 
 		// Check cache first
 		const cached = streamCache.getSync(video.platform, video.videoId);
 		if (cached) {
 			streamInfo = cached;
 			useDirectStream = !!cached.stream_url;
+			if (cached.quality) {
+				currentQuality = cached.quality;
+			}
 			return;
 		}
 
@@ -141,6 +174,9 @@
 		if (result) {
 			streamInfo = result;
 			useDirectStream = !!result.stream_url;
+			if (result.quality) {
+				currentQuality = result.quality;
+			}
 		}
 
 		// Prefetch upcoming
@@ -188,6 +224,50 @@
 		}
 	}
 
+	async function handleQualityChange(quality: string) {
+		if (!video || quality === currentQuality) return;
+
+		// Save preference
+		qualityPreferences.setPreferredQuality(quality as QualityLevel);
+		currentQuality = quality;
+
+		// For 'auto', let the player decide - no need to refetch
+		if (quality === 'auto') {
+			return;
+		}
+
+		// Refetch stream with new quality
+		qualityLoading = true;
+		try {
+			// Save current playback position
+			const currentTime = controls.getCurrentTime();
+
+			// Fetch new stream with quality parameter
+			const result = await fetchStreamInfo(
+				video.platform,
+				video.videoId,
+				'critical',
+				video.videoUrl,
+				quality
+			);
+
+			if (result && result.stream_url) {
+				streamInfo = result;
+				useDirectStream = true;
+				preferredStrategy = 'direct_stream';
+
+				// Save playhead to restore after quality switch
+				if (currentTime > 0) {
+					videoPlayer.savePlayhead(currentTime);
+				}
+			}
+		} catch (e) {
+			console.warn('Failed to switch quality:', e);
+		} finally {
+			qualityLoading = false;
+		}
+	}
+
 	function handleChapterSeek(seconds: number) {
 		controls.seekTo(seconds);
 		currentPlaybackTime = seconds;
@@ -221,6 +301,9 @@
 			useDirectStream = false;
 			preferredStrategy = undefined;
 			contentReady = false;
+			qualityLoading = false;
+			// Initialize quality from preferences
+			currentQuality = qualityPreferences.getEffectiveQuality(video.platform);
 			progress.stop();
 
 			// Initialize player state
@@ -305,6 +388,11 @@
 				onSwitchToPiP={handleSwitchToPiP}
 				onClose={handleClose}
 				{theaterMode}
+				{currentQuality}
+				{availableQualities}
+				onQualityChange={handleQualityChange}
+				showQualitySelector={useDirectStream && availableQualities.length > 0}
+				{qualityLoading}
 			/>
 
 			<div class="player-content-wrapper">
@@ -327,6 +415,10 @@
 			</div>
 
 			<PlayerInfo {video} />
+
+			{#if videoPlayer.queueLength > 1}
+				<QueuePanel />
+			{/if}
 
 			{#if video.sourceType === 'feed' && video.sourceId}
 				<ChapterList

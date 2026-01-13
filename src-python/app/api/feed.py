@@ -51,6 +51,8 @@ def _feed_item_to_response(
         thumbnail_url=thumbnail_url,
         duration_seconds=item.duration_seconds,
         view_count=item.view_count,
+        like_count=item.like_count,
+        tags=item.tags,
         upload_date=item.upload_date,
         categories=item.categories,
         audio_url=item.audio_url,

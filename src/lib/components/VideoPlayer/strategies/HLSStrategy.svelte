@@ -255,6 +255,7 @@
 		<video
 			bind:this={videoElement}
 			controls
+			playsinline
 			class="hls-video"
 			oncanplay={handleCanPlay}
 			onplay={handlePlay}

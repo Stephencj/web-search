@@ -96,6 +96,7 @@
 			src={streamUrl}
 			controls
 			autoplay={autoplay}
+			playsinline
 			class="direct-video"
 			oncanplay={handleCanPlay}
 			onplay={handlePlay}

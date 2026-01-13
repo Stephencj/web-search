@@ -77,21 +77,19 @@ export function useProgressTracking(
 		// Always save locally first
 		saveLocal(currentTime);
 
-		// Collection items are local-only (no API sync)
-		if (video.sourceType === 'collection') {
-			lastApiSaveProgress = currentTime;
-			return;
-		}
-
 		try {
 			if (video.sourceType === 'feed') {
 				await api.updateFeedItemProgress(video.sourceId, Math.floor(currentTime));
 			} else if (video.sourceType === 'saved') {
 				await api.updateSavedVideoProgress(video.sourceId, Math.floor(currentTime));
+			} else if (video.sourceType === 'collection' && video.collectionId) {
+				await api.updateCollectionItemProgress(video.collectionId, video.sourceId, Math.floor(currentTime));
 			}
 			lastApiSaveProgress = currentTime;
 			// Mark as synced in local store
-			watchProgress.markSynced(video.sourceType as 'feed' | 'saved', video.sourceId);
+			if (video.sourceType !== 'collection') {
+				watchProgress.markSynced(video.sourceType as 'feed' | 'saved', video.sourceId);
+			}
 		} catch (e) {
 			console.warn('[ProgressTracking] API save failed:', e);
 			// Local save already happened, progress is preserved
@@ -107,22 +105,17 @@ export function useProgressTracking(
 		const video = getVideo();
 		if (!video?.sourceId || video.sourceType === 'discover') return;
 
-		// Collection items just clear local progress (no API)
-		if (video.sourceType === 'collection') {
-			watchProgress.clear('collection', video.sourceId);
-			isWatched = true;
-			onMarkedWatched?.();
-			return;
-		}
-
 		try {
 			if (video.sourceType === 'feed') {
 				await api.markFeedItemWatched(video.sourceId, Math.floor(finalProgress));
 			} else if (video.sourceType === 'saved') {
 				await api.markSavedVideoWatched(video.sourceId, Math.floor(finalProgress));
+			} else if (video.sourceType === 'collection' && video.collectionId) {
+				await api.markCollectionItemWatched(video.collectionId, video.sourceId, true);
 			}
 			// Clear local progress since video is now marked watched
-			watchProgress.clear(video.sourceType as 'feed' | 'saved', video.sourceId);
+			const sourceType = video.sourceType === 'collection' ? 'collection' : (video.sourceType as 'feed' | 'saved');
+			watchProgress.clear(sourceType, video.sourceId);
 			isWatched = true;
 			onMarkedWatched?.();
 		} catch (e) {

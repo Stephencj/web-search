@@ -658,6 +658,16 @@ class FeedSyncService:
                             feed_item.description = info['description'][:2000]  # Limit length
                             updated_fields.append('description')
 
+                        # Update like_count if available
+                        if 'like_count' in info and info['like_count']:
+                            feed_item.like_count = info['like_count']
+                            updated_fields.append('like_count')
+
+                        # Update tags if available (limit to 50 tags)
+                        if 'tags' in info and info['tags']:
+                            feed_item.tags = info['tags'][:50]
+                            updated_fields.append('tags')
+
                         if updated_fields:
                             await db.commit()
                             logger.debug(f"Updated {video_id}: {', '.join(updated_fields)}")

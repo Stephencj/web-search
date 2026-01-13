@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # Stage 1: Build the SvelteKit frontend
 FROM node:20-alpine AS frontend-builder
 
@@ -8,8 +6,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with cache mount
-RUN --mount=type=cache,target=/root/.npm npm ci
+# Install dependencies
+RUN npm ci
 
 # Copy frontend source
 COPY src/ ./src/
@@ -34,10 +32,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy Python requirements
 COPY src-python/requirements.txt ./requirements.txt
 
-# Install Python dependencies with cache mount
-RUN --mount=type=cache,target=/root/.cache/pip \
-    sed -i '/pywin32/d' requirements.txt && \
-    pip install -r requirements.txt
+# Install Python dependencies
+RUN sed -i '/pywin32/d' requirements.txt && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy alembic (changes less frequently)
 COPY src-python/alembic.ini ./

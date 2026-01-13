@@ -41,6 +41,8 @@ class FeedItem(Base):
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     view_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    like_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tags: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)  # Video tags
     upload_date: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     categories: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)  # YouTube categories
 
