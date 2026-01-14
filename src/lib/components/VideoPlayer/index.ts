@@ -1,8 +1,6 @@
-// V2 players with new modular architecture
+// V2 player with modular architecture
 export { default as VideoPlayerModal } from './VideoPlayerModalV2.svelte';
-export { default as PiPPlayer } from './PiPPlayerV2.svelte';
 export { default as EmbedFallback } from './EmbedFallback.svelte';
 
-// Legacy exports (for gradual migration)
+// Legacy export (for gradual migration)
 export { default as VideoPlayerModalLegacy } from './VideoPlayerModal.svelte';
-export { default as PiPPlayerLegacy } from './PiPPlayer.svelte';

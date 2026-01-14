@@ -73,13 +73,11 @@
 
 	// Derived values
 	const video = $derived(videoPlayer.currentVideo);
-	const isOpen = $derived(videoPlayer.isModal && video !== null);
+	const isOpen = $derived(videoPlayer.isOpen && video !== null);
 	const videoKey = $derived(videoPlayer.videoKey);
 	const theaterMode = $derived(playbackPreferences.theaterMode);
 	const savedPlayhead = $derived(videoPlayer.savedPlayhead);
 	const shouldResumePlayback = $derived(videoPlayer.shouldResumePlayback);
-	const isNativePiPActive = $derived(videoPlayer.isNativePiPActive);
-	const isHiddenForNativePiP = $derived(videoPlayer.isHiddenForNativePiP);
 
 	// Callbacks for strategy components
 	const strategyCallbacks: PlaybackCallbacks = {
@@ -189,13 +187,6 @@
 	}
 
 	function handleClose() {
-		// If native PiP is active, minimize to pip mode instead of closing
-		// This allows the video to continue playing in native PiP while browsing
-		if (isNativePiPActive) {
-			handleMinimizeToNativePiP();
-			return;
-		}
-
 		// Save final progress
 		const time = controls.getCurrentTime();
 		if (time > 0) {
@@ -210,23 +201,6 @@
 		streamInfo = null;
 		useDirectStream = false;
 		preferredStrategy = undefined;
-	}
-
-	function handleMinimizeToNativePiP() {
-		// Hide the modal overlay but keep video element alive for native PiP
-		// This allows the video to continue playing in iOS's native PiP window
-		// while the user browses other content
-		videoPlayer.setHiddenForNativePiP(true);
-	}
-
-	function handleSwitchToPiP() {
-		const time = controls.getCurrentTime();
-		if (time > 0) {
-			progress.saveToApi(time);
-		}
-		progress.stop();
-		videoPlayer.savePlayhead(time);
-		videoPlayer.switchToPiP();
 	}
 
 	function toggleTheaterMode() {
@@ -298,8 +272,6 @@
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
 			handleClose();
-		} else if (event.key === 'p' || event.key === 'P') {
-			handleSwitchToPiP();
 		} else if (event.key === 't' || event.key === 'T') {
 			toggleTheaterMode();
 		} else if (event.key === 'ArrowLeft' && videoPlayer.hasPrevious) {
@@ -390,7 +362,6 @@
 {#if isOpen && video}
 	<div
 		class="player-overlay"
-		class:hidden-for-pip={isHiddenForNativePiP}
 		onclick={handleBackdropClick}
 		role="dialog"
 		aria-modal="true"
@@ -402,7 +373,6 @@
 				{useDirectStream}
 				onToggleDirectStream={toggleDirectStream}
 				onToggleTheaterMode={toggleTheaterMode}
-				onSwitchToPiP={handleSwitchToPiP}
 				onClose={handleClose}
 				{theaterMode}
 				{currentQuality}
@@ -458,12 +428,6 @@
 		justify-content: center;
 		z-index: 1000;
 		padding: var(--spacing-lg);
-	}
-
-	/* Hide modal visually but keep video element alive for native PiP */
-	.player-overlay.hidden-for-pip {
-		visibility: hidden;
-		pointer-events: none;
 	}
 
 	.player-modal {
