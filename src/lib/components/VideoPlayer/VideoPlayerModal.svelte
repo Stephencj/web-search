@@ -38,7 +38,7 @@
 
   // Computed values
   const video = $derived(videoPlayer.currentVideo);
-  const isOpen = $derived(videoPlayer.isModal && video !== null);
+  const isOpen = $derived(videoPlayer.isOpen && video !== null);
   const embedUrl = $derived(video?.embedConfig.embedUrl);
   const canEmbed = $derived(video?.embedConfig.supportsEmbed && !iframeError);
   const platformName = $derived(video ? getPlatformName(video.platform) : '');
@@ -363,37 +363,8 @@
     return 0;
   }
 
-  function handleSwitchToPiP() {
-    // Save current playhead position before switching
-    const currentTime = getCurrentPlaybackTime();
-    if (currentTime > 0) {
-      saveProgress(currentTime);
-    }
-    stopProgressTracking();
-    videoPlayer.savePlayhead(currentTime);
-    videoPlayer.switchToPiP();
-  }
-
   function toggleTheaterMode() {
     playbackPreferences.toggleTheaterMode();
-  }
-
-  /**
-   * Request native browser PiP for background audio playback
-   * This allows audio to continue when screen is off on mobile
-   */
-  async function requestNativePiP() {
-    if (!videoElement) return false;
-
-    try {
-      if (document.pictureInPictureEnabled && !document.pictureInPictureElement) {
-        await videoElement.requestPictureInPicture();
-        return true;
-      }
-    } catch (e) {
-      console.warn('[Modal] Native PiP request failed:', e);
-    }
-    return false;
   }
 
   function handleBackdropClick(event: MouseEvent) {
@@ -524,8 +495,6 @@
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       handleClose();
-    } else if (event.key === 'p' || event.key === 'P') {
-      handleSwitchToPiP();
     } else if (event.key === 't' || event.key === 'T') {
       toggleTheaterMode();
     } else if (event.key === 'ArrowLeft' && hasPrevious) {
@@ -687,35 +656,6 @@
     };
   });
 
-  // Handle visibility changes for background playback
-  $effect(() => {
-    if (!isOpen) return;
-
-    function handleVisibilityChange() {
-      if (document.hidden && playbackPreferences.backgroundPlayback) {
-        // Tab became hidden and background playback is enabled
-        if (useDirectStream && videoElement) {
-          // For direct video: try to enter PiP mode to continue playback
-          if (document.pictureInPictureEnabled && !document.pictureInPictureElement) {
-            videoElement.requestPictureInPicture().catch(() => {
-              // PiP not available, video continues in background anyway for direct streams
-            });
-          }
-        } else if (canEmbed) {
-          // For embeds: switch to PiP player which handles background playback better
-          videoPlayer.switchToPiP();
-        }
-      } else if (!document.hidden && videoElement) {
-        // Tab became visible again - exit PiP if we entered it automatically
-        if (document.pictureInPictureElement === videoElement) {
-          document.exitPictureInPicture().catch(() => {});
-        }
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -798,15 +738,6 @@
               {:else}
                 <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
               {/if}
-            </svg>
-          </button>
-          <button
-            class="header-btn pip-btn"
-            onclick={handleSwitchToPiP}
-            title="Mini Player (P)"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-              <path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/>
             </svg>
           </button>
           <button

@@ -70,7 +70,7 @@ export interface StreamInfo {
   error?: string;
 }
 
-export type PlayerMode = 'modal' | 'pip' | 'closed';
+export type PlayerMode = 'open' | 'closed';
 
 // Stream cache for pre-fetched stream URLs
 const streamCache = new Map<string, StreamInfo>();
@@ -161,12 +161,8 @@ function createVideoPlayerStore() {
   let isPlaying = $state<boolean>(false);
   let currentTime = $state<number>(0);
   let duration = $state<number>(0);
-  // Flag to indicate playback should continue after mode switch
+  // Flag to indicate playback should continue after video change
   let shouldResumePlayback = $state<boolean>(false);
-  // Track native browser PiP state (iOS Safari)
-  let isNativePiPActive = $state<boolean>(false);
-  // When true, modal is hidden but video element kept alive for native PiP
-  let isHiddenForNativePiP = $state<boolean>(false);
 
   // Helper to dispatch custom events for player control
   function dispatchPlayerEvent(eventName: string, detail?: unknown) {
@@ -232,12 +228,6 @@ function createVideoPlayerStore() {
     get isOpen() {
       return mode !== 'closed' && currentVideo !== null;
     },
-    get isModal() {
-      return mode === 'modal';
-    },
-    get isPiP() {
-      return mode === 'pip';
-    },
     get queue() {
       return queue;
     },
@@ -271,35 +261,11 @@ function createVideoPlayerStore() {
     get shouldResumePlayback() {
       return shouldResumePlayback;
     },
-    get isNativePiPActive() {
-      return isNativePiPActive;
-    },
-    get isHiddenForNativePiP() {
-      return isHiddenForNativePiP;
-    },
 
     /**
      * Initialize media session (call once on app mount)
      */
     initMediaSession,
-
-    /**
-     * Set native PiP state (called by NativePiPTracker)
-     */
-    setNativePiPActive(active: boolean) {
-      isNativePiPActive = active;
-      // Reset hidden state when native PiP exits
-      if (!active) {
-        isHiddenForNativePiP = false;
-      }
-    },
-
-    /**
-     * Hide modal but keep video alive for native PiP
-     */
-    setHiddenForNativePiP(hidden: boolean) {
-      isHiddenForNativePiP = hidden;
-    },
 
     /**
      * Update playback state (called by active player)
@@ -391,11 +357,11 @@ function createVideoPlayerStore() {
     },
 
     /**
-     * Open video in modal mode
+     * Open video player
      */
     openModal(video: VideoItem) {
       currentVideo = video;
-      mode = 'modal';
+      mode = 'open';
       savedPlayhead = 0;
       videoKey++;
       // Clear queue when opening single video
@@ -411,7 +377,7 @@ function createVideoPlayerStore() {
       queue = [...videos];
       currentIndex = Math.max(0, Math.min(startIndex, videos.length - 1));
       currentVideo = queue[currentIndex];
-      mode = 'modal';
+      mode = 'open';
       savedPlayhead = 0;
       videoKey++;
     },
@@ -460,28 +426,6 @@ function createVideoPlayerStore() {
     },
 
     /**
-     * Switch current video to PiP mode (preserves playhead via savePlayhead call)
-     */
-    switchToPiP() {
-      if (currentVideo) {
-        // Remember if video was playing so PiP can resume
-        shouldResumePlayback = isPlaying;
-        mode = 'pip';
-      }
-    },
-
-    /**
-     * Switch from PiP back to modal (preserves playhead via savePlayhead call)
-     */
-    switchToModal() {
-      if (currentVideo) {
-        // Remember if video was playing so modal can resume
-        shouldResumePlayback = isPlaying;
-        mode = 'modal';
-      }
-    },
-
-    /**
      * Close the player completely
      */
     close() {
@@ -505,7 +449,7 @@ function createVideoPlayerStore() {
       savedPlayhead = 0;
       videoKey++;
       if (mode === 'closed') {
-        mode = 'modal';
+        mode = 'open';
       }
     },
 

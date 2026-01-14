@@ -16,13 +16,9 @@
 		useDirectStream?: boolean;
 		onToggleDirectStream?: () => void;
 		onToggleTheaterMode?: () => void;
-		onSwitchToPiP?: () => void;
-		onSwitchToModal?: () => void;
 		onClose?: () => void;
 		theaterMode?: boolean;
 		showTheaterToggle?: boolean;
-		showPiPToggle?: boolean;
-		showModalToggle?: boolean;
 		// Quality selector props
 		currentQuality?: string | null;
 		availableQualities?: QualityOption[];
@@ -37,13 +33,9 @@
 		useDirectStream = false,
 		onToggleDirectStream,
 		onToggleTheaterMode,
-		onSwitchToPiP,
-		onSwitchToModal,
 		onClose,
 		theaterMode = false,
 		showTheaterToggle = true,
-		showPiPToggle = true,
-		showModalToggle = false,
 		// Quality selector defaults
 		currentQuality = null,
 		availableQualities = [],
@@ -152,22 +144,6 @@
 					{:else}
 						<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
 					{/if}
-				</svg>
-			</button>
-		{/if}
-		{#if showPiPToggle && onSwitchToPiP}
-			<button class="header-btn pip-btn" onclick={onSwitchToPiP} title="Mini Player (P)">
-				<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-					<path
-						d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"
-					/>
-				</svg>
-			</button>
-		{/if}
-		{#if showModalToggle && onSwitchToModal}
-			<button class="header-btn expand-btn" onclick={onSwitchToModal} title="Expand (M)">
-				<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-					<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
 				</svg>
 			</button>
 		{/if}
