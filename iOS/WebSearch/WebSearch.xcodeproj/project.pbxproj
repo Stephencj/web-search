@@ -1,0 +1,693 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B001 /* WebSearchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F001 /* WebSearchApp.swift */; };
+		B002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F002 /* ContentView.swift */; };
+		B003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F003 /* Assets.xcassets */; };
+		B004 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F004 /* APIClient.swift */; };
+		B005 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = F005 /* Models.swift */; };
+		B006 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F006 /* LoginView.swift */; };
+		B007 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F007 /* FeedView.swift */; };
+		B008 /* FeedItemRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F008 /* FeedItemRow.swift */; };
+		B009 /* FeedFilterSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F009 /* FeedFilterSheet.swift */; };
+		B010 /* ChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F010 /* ChannelsView.swift */; };
+		B011 /* AddChannelSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F011 /* AddChannelSheet.swift */; };
+		B012 /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F012 /* DiscoverView.swift */; };
+		B013 /* SavedVideosView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F013 /* SavedVideosView.swift */; };
+		B014 /* CollectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F014 /* CollectionsView.swift */; };
+		B015 /* CollectionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F015 /* CollectionDetailView.swift */; };
+		B016 /* MiniPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F016 /* MiniPlayerView.swift */; };
+		B017 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F017 /* SettingsView.swift */; };
+		B018 /* PlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F018 /* PlayerService.swift */; };
+		B019 /* VideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F020 /* VideoPlayerView.swift */; };
+		B020 /* WebVideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F021 /* WebVideoPlayerView.swift */; };
+		B021 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F022 /* HistoryView.swift */; };
+		TV001 /* WebSearchTVApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF001 /* WebSearchTVApp.swift */; };
+		TV002 /* TVContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF002 /* TVContentView.swift */; };
+		TV003 /* TVLoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF003 /* TVLoginView.swift */; };
+		TV004 /* TVFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF004 /* TVFeedView.swift */; };
+		TV005 /* TVVideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF005 /* TVVideoPlayerView.swift */; };
+		TV018 /* TVSponsorSkip.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF018 /* TVSponsorSkip.swift */; };
+		TV006 /* TVChannelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF006 /* TVChannelsView.swift */; };
+		TV007 /* TVDiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF007 /* TVDiscoverView.swift */; };
+		TV008 /* TVCollectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF008 /* TVCollectionsView.swift */; };
+		TV009 /* TVSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF009 /* TVSettingsView.swift */; };
+		TV010 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F004 /* APIClient.swift */; };
+		TV011 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = F005 /* Models.swift */; };
+		TV012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F003 /* Assets.xcassets */; };
+		TV013 /* VideoContextMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF013 /* VideoContextMenu.swift */; };
+		TV014 /* PlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F018 /* PlayerService.swift */; };
+		TV015 /* VideoStreamCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F023 /* VideoStreamCoordinator.swift */; };
+		B022 /* VideoStreamCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F023 /* VideoStreamCoordinator.swift */; };
+		TV016 /* TVWebVideoPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF016 /* TVWebVideoPlayerView.swift */; };
+		TV017 /* TVSavedVideosView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TVF017 /* TVSavedVideosView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		F000 /* WebSearch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WebSearch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F001 /* WebSearchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearchApp.swift; sourceTree = "<group>"; };
+		F002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		F003 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		F004 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		F005 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		F006 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		F007 /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
+		F008 /* FeedItemRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedItemRow.swift; sourceTree = "<group>"; };
+		F009 /* FeedFilterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedFilterSheet.swift; sourceTree = "<group>"; };
+		F010 /* ChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelsView.swift; sourceTree = "<group>"; };
+		F011 /* AddChannelSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddChannelSheet.swift; sourceTree = "<group>"; };
+		F012 /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
+		F013 /* SavedVideosView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedVideosView.swift; sourceTree = "<group>"; };
+		F014 /* CollectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionsView.swift; sourceTree = "<group>"; };
+		F015 /* CollectionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollectionDetailView.swift; sourceTree = "<group>"; };
+		F016 /* MiniPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniPlayerView.swift; sourceTree = "<group>"; };
+		F017 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		F018 /* PlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerService.swift; sourceTree = "<group>"; };
+		F019 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F020 /* VideoPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoPlayerView.swift; sourceTree = "<group>"; };
+		F021 /* WebVideoPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebVideoPlayerView.swift; sourceTree = "<group>"; };
+		F022 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		TVF000 /* WebSearchTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WebSearchTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		TVF001 /* WebSearchTVApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearchTVApp.swift; sourceTree = "<group>"; };
+		TVF002 /* TVContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVContentView.swift; sourceTree = "<group>"; };
+		TVF003 /* TVLoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVLoginView.swift; sourceTree = "<group>"; };
+		TVF004 /* TVFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVFeedView.swift; sourceTree = "<group>"; };
+		TVF018 /* TVSponsorSkip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVSponsorSkip.swift; sourceTree = "<group>"; };
+		TVF005 /* TVVideoPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVVideoPlayerView.swift; sourceTree = "<group>"; };
+		TVF006 /* TVChannelsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVChannelsView.swift; sourceTree = "<group>"; };
+		TVF007 /* TVDiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVDiscoverView.swift; sourceTree = "<group>"; };
+		TVF008 /* TVCollectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVCollectionsView.swift; sourceTree = "<group>"; };
+		TVF009 /* TVSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVSettingsView.swift; sourceTree = "<group>"; };
+		TVF010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		TVF013 /* VideoContextMenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoContextMenu.swift; sourceTree = "<group>"; };
+		F023 /* VideoStreamCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoStreamCoordinator.swift; sourceTree = "<group>"; };
+		TVF016 /* TVWebVideoPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVWebVideoPlayerView.swift; sourceTree = "<group>"; };
+		TVF017 /* TVSavedVideosView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TVSavedVideosView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E000 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		TVE000 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		G000 = {
+			isa = PBXGroup;
+			children = (
+				G001 /* WebSearch */,
+				TVG000 /* WebSearchTV */,
+				G002 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		G001 /* WebSearch */ = {
+			isa = PBXGroup;
+			children = (
+				F001 /* WebSearchApp.swift */,
+				F002 /* ContentView.swift */,
+				G003 /* API */,
+				G004 /* Views */,
+				G011 /* Services */,
+				F003 /* Assets.xcassets */,
+				F019 /* Info.plist */,
+			);
+			path = WebSearch;
+			sourceTree = "<group>";
+		};
+		G002 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F000 /* WebSearch.app */,
+				TVF000 /* WebSearchTV.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		G003 /* API */ = {
+			isa = PBXGroup;
+			children = (
+				F004 /* APIClient.swift */,
+				F005 /* Models.swift */,
+			);
+			path = API;
+			sourceTree = "<group>";
+		};
+		G004 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				G005 /* Auth */,
+				G006 /* Feed */,
+				G007 /* Channels */,
+				G008 /* Discover */,
+				G009 /* Saved */,
+				G010 /* Collections */,
+				G012 /* Player */,
+				G013 /* Settings */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		G005 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				F006 /* LoginView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		G006 /* Feed */ = {
+			isa = PBXGroup;
+			children = (
+				F007 /* FeedView.swift */,
+				F008 /* FeedItemRow.swift */,
+				F009 /* FeedFilterSheet.swift */,
+			);
+			path = Feed;
+			sourceTree = "<group>";
+		};
+		G007 /* Channels */ = {
+			isa = PBXGroup;
+			children = (
+				F010 /* ChannelsView.swift */,
+				F011 /* AddChannelSheet.swift */,
+			);
+			path = Channels;
+			sourceTree = "<group>";
+		};
+		G008 /* Discover */ = {
+			isa = PBXGroup;
+			children = (
+				F012 /* DiscoverView.swift */,
+			);
+			path = Discover;
+			sourceTree = "<group>";
+		};
+		G009 /* Saved */ = {
+			isa = PBXGroup;
+			children = (
+				F013 /* SavedVideosView.swift */,
+			);
+			path = Saved;
+			sourceTree = "<group>";
+		};
+		G010 /* Collections */ = {
+			isa = PBXGroup;
+			children = (
+				F014 /* CollectionsView.swift */,
+				F015 /* CollectionDetailView.swift */,
+				F022 /* HistoryView.swift */,
+			);
+			path = Collections;
+			sourceTree = "<group>";
+		};
+		G011 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				F018 /* PlayerService.swift */,
+				F023 /* VideoStreamCoordinator.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		G012 /* Player */ = {
+			isa = PBXGroup;
+			children = (
+				F016 /* MiniPlayerView.swift */,
+				F020 /* VideoPlayerView.swift */,
+				F021 /* WebVideoPlayerView.swift */,
+			);
+			path = Player;
+			sourceTree = "<group>";
+		};
+		G013 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				F017 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		TVG000 /* WebSearchTV */ = {
+			isa = PBXGroup;
+			children = (
+				TVF001 /* WebSearchTVApp.swift */,
+				TVF002 /* TVContentView.swift */,
+				TVG001 /* Views */,
+				TVF010 /* Info.plist */,
+			);
+			path = WebSearchTV;
+			sourceTree = "<group>";
+		};
+		TVG001 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				TVF003 /* TVLoginView.swift */,
+				TVF004 /* TVFeedView.swift */,
+				TVF005 /* TVVideoPlayerView.swift */,
+				TVF018 /* TVSponsorSkip.swift */,
+				TVF016 /* TVWebVideoPlayerView.swift */,
+				TVF006 /* TVChannelsView.swift */,
+				TVF007 /* TVDiscoverView.swift */,
+				TVF008 /* TVCollectionsView.swift */,
+				TVF009 /* TVSettingsView.swift */,
+				TVF013 /* VideoContextMenu.swift */,
+				TVF017 /* TVSavedVideosView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		T000 /* WebSearch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C002 /* Build configuration list for PBXNativeTarget "WebSearch" */;
+			buildPhases = (
+				S000 /* Sources */,
+				E000 /* Frameworks */,
+				R000 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WebSearch;
+			productName = WebSearch;
+			productReference = F000 /* WebSearch.app */;
+			productType = "com.apple.product-type.application";
+		};
+		TVT000 /* WebSearchTV */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = TVC002 /* Build configuration list for PBXNativeTarget "WebSearchTV" */;
+			buildPhases = (
+				TVS000 /* Sources */,
+				TVE000 /* Frameworks */,
+				TVR000 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WebSearchTV;
+			productName = WebSearchTV;
+			productReference = TVF000 /* WebSearchTV.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		P000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					T000 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					TVT000 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = C001 /* Build configuration list for PBXProject "WebSearch" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = G000;
+			productRefGroup = G002 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				T000 /* WebSearch */,
+				TVT000 /* WebSearchTV */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		R000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B003 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		TVR000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				TV012 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		S000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B001 /* WebSearchApp.swift in Sources */,
+				B002 /* ContentView.swift in Sources */,
+				B004 /* APIClient.swift in Sources */,
+				B005 /* Models.swift in Sources */,
+				B006 /* LoginView.swift in Sources */,
+				B007 /* FeedView.swift in Sources */,
+				B008 /* FeedItemRow.swift in Sources */,
+				B009 /* FeedFilterSheet.swift in Sources */,
+				B010 /* ChannelsView.swift in Sources */,
+				B011 /* AddChannelSheet.swift in Sources */,
+				B012 /* DiscoverView.swift in Sources */,
+				B013 /* SavedVideosView.swift in Sources */,
+				B014 /* CollectionsView.swift in Sources */,
+				B015 /* CollectionDetailView.swift in Sources */,
+				B016 /* MiniPlayerView.swift in Sources */,
+				B017 /* SettingsView.swift in Sources */,
+				B018 /* PlayerService.swift in Sources */,
+				B019 /* VideoPlayerView.swift in Sources */,
+				B020 /* WebVideoPlayerView.swift in Sources */,
+				B021 /* HistoryView.swift in Sources */,
+				B022 /* VideoStreamCoordinator.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		TVS000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				TV001 /* WebSearchTVApp.swift in Sources */,
+				TV002 /* TVContentView.swift in Sources */,
+				TV003 /* TVLoginView.swift in Sources */,
+				TV004 /* TVFeedView.swift in Sources */,
+				TV005 /* TVVideoPlayerView.swift in Sources */,
+				TV018 /* TVSponsorSkip.swift in Sources */,
+				TV006 /* TVChannelsView.swift in Sources */,
+				TV007 /* TVDiscoverView.swift in Sources */,
+				TV008 /* TVCollectionsView.swift in Sources */,
+				TV009 /* TVSettingsView.swift in Sources */,
+				TV010 /* APIClient.swift in Sources */,
+				TV011 /* Models.swift in Sources */,
+				TV013 /* VideoContextMenu.swift in Sources */,
+				TV014 /* PlayerService.swift in Sources */,
+				TV015 /* VideoStreamCoordinator.swift in Sources */,
+				TV016 /* TVWebVideoPlayerView.swift in Sources */,
+				TV017 /* TVSavedVideosView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		X001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		X002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		X003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PJV7U329Q6;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WebSearch/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stephencjuliano.WebSearch;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		X004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PJV7U329Q6;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WebSearch/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stephencjuliano.WebSearch;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		TVX003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PJV7U329Q6;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WebSearchTV/Info.plist;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stephencjuliano.WebSearchTV;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+			};
+			name = Debug;
+		};
+		TVX004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PJV7U329Q6;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WebSearchTV/Info.plist;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.stephencjuliano.WebSearchTV;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 17.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C001 /* Build configuration list for PBXProject "WebSearch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				X001 /* Debug */,
+				X002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C002 /* Build configuration list for PBXNativeTarget "WebSearch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				X003 /* Debug */,
+				X004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		TVC002 /* Build configuration list for PBXNativeTarget "WebSearchTV" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				TVX003 /* Debug */,
+				TVX004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = P000 /* Project object */;
+}
