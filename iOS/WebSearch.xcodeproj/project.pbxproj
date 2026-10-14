@@ -1,0 +1,482 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A1000001AAAAAAAA /* WebSearchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000001AAAAAAAA /* WebSearchApp.swift */; };
+		A1000002AAAAAAAA /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000002AAAAAAAA /* AppDelegate.swift */; };
+		A1000010AAAAAAAA /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000010AAAAAAAA /* User.swift */; };
+		A1000011AAAAAAAA /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000011AAAAAAAA /* Channel.swift */; };
+		A1000012AAAAAAAA /* FeedItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000012AAAAAAAA /* FeedItem.swift */; };
+		A1000013AAAAAAAA /* SavedVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000013AAAAAAAA /* SavedVideo.swift */; };
+		A1000014AAAAAAAA /* Collection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000014AAAAAAAA /* Collection.swift */; };
+		A1000015AAAAAAAA /* WatchState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000015AAAAAAAA /* WatchState.swift */; };
+		A1000020AAAAAAAA /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000020AAAAAAAA /* APIClient.swift */; };
+		A1000021AAAAAAAA /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000021AAAAAAAA /* AuthService.swift */; };
+		A1000022AAAAAAAA /* PlayerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000022AAAAAAAA /* PlayerService.swift */; };
+		A1000030AAAAAAAA /* KeychainManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000030AAAAAAAA /* KeychainManager.swift */; };
+		A1000040AAAAAAAA /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000040AAAAAAAA /* ContentView.swift */; };
+		A1000041AAAAAAAA /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000041AAAAAAAA /* LoginView.swift */; };
+		A1000042AAAAAAAA /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000042AAAAAAAA /* FeedView.swift */; };
+		A1000043AAAAAAAA /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000043AAAAAAAA /* FeedViewModel.swift */; };
+		A1000044AAAAAAAA /* FeedItemRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000044AAAAAAAA /* FeedItemRow.swift */; };
+		A1000050AAAAAAAA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000050AAAAAAAA /* Assets.xcassets */; };
+		A1000051AAAAAAAA /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000051AAAAAAAA /* Preview Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B1000001AAAAAAAA /* WebSearchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearchApp.swift; sourceTree = "<group>"; };
+		B1000002AAAAAAAA /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		B1000010AAAAAAAA /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
+		B1000011AAAAAAAA /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
+		B1000012AAAAAAAA /* FeedItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedItem.swift; sourceTree = "<group>"; };
+		B1000013AAAAAAAA /* SavedVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedVideo.swift; sourceTree = "<group>"; };
+		B1000014AAAAAAAA /* Collection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Collection.swift; sourceTree = "<group>"; };
+		B1000015AAAAAAAA /* WatchState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchState.swift; sourceTree = "<group>"; };
+		B1000020AAAAAAAA /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		B1000021AAAAAAAA /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		B1000022AAAAAAAA /* PlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerService.swift; sourceTree = "<group>"; };
+		B1000030AAAAAAAA /* KeychainManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainManager.swift; sourceTree = "<group>"; };
+		B1000040AAAAAAAA /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		B1000041AAAAAAAA /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		B1000042AAAAAAAA /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
+		B1000043AAAAAAAA /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
+		B1000044AAAAAAAA /* FeedItemRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedItemRow.swift; sourceTree = "<group>"; };
+		B1000050AAAAAAAA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B1000051AAAAAAAA /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		C1000000AAAAAAAA /* WebSearch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WebSearch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D1000000AAAAAAAA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E1000000AAAAAAAA = {
+			isa = PBXGroup;
+			children = (
+				E1000001AAAAAAAA /* WebSearch */,
+				E1000099AAAAAAAA /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E1000001AAAAAAAA /* WebSearch */ = {
+			isa = PBXGroup;
+			children = (
+				E1000002AAAAAAAA /* App */,
+				E1000003AAAAAAAA /* Core */,
+				E1000004AAAAAAAA /* Features */,
+				E1000005AAAAAAAA /* Resources */,
+				E1000006AAAAAAAA /* Preview Content */,
+			);
+			path = WebSearch;
+			sourceTree = "<group>";
+		};
+		E1000002AAAAAAAA /* App */ = {
+			isa = PBXGroup;
+			children = (
+				B1000001AAAAAAAA /* WebSearchApp.swift */,
+				B1000002AAAAAAAA /* AppDelegate.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		E1000003AAAAAAAA /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				E1000010AAAAAAAA /* Models */,
+				E1000011AAAAAAAA /* Services */,
+				E1000012AAAAAAAA /* Utilities */,
+			);
+			path = Core;
+			sourceTree = "<group>";
+		};
+		E1000004AAAAAAAA /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				B1000040AAAAAAAA /* ContentView.swift */,
+				E1000020AAAAAAAA /* Auth */,
+				E1000021AAAAAAAA /* Feed */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		E1000005AAAAAAAA /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B1000050AAAAAAAA /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		E1000006AAAAAAAA /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				B1000051AAAAAAAA /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		E1000010AAAAAAAA /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				B1000010AAAAAAAA /* User.swift */,
+				B1000011AAAAAAAA /* Channel.swift */,
+				B1000012AAAAAAAA /* FeedItem.swift */,
+				B1000013AAAAAAAA /* SavedVideo.swift */,
+				B1000014AAAAAAAA /* Collection.swift */,
+				B1000015AAAAAAAA /* WatchState.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		E1000011AAAAAAAA /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				B1000020AAAAAAAA /* APIClient.swift */,
+				B1000021AAAAAAAA /* AuthService.swift */,
+				B1000022AAAAAAAA /* PlayerService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		E1000012AAAAAAAA /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				B1000030AAAAAAAA /* KeychainManager.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		E1000020AAAAAAAA /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				B1000041AAAAAAAA /* LoginView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		E1000021AAAAAAAA /* Feed */ = {
+			isa = PBXGroup;
+			children = (
+				B1000042AAAAAAAA /* FeedView.swift */,
+				B1000043AAAAAAAA /* FeedViewModel.swift */,
+				B1000044AAAAAAAA /* FeedItemRow.swift */,
+			);
+			path = Feed;
+			sourceTree = "<group>";
+		};
+		E1000099AAAAAAAA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C1000000AAAAAAAA /* WebSearch.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		F1000000AAAAAAAA /* WebSearch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F1000010AAAAAAAA /* Build configuration list for PBXNativeTarget "WebSearch" */;
+			buildPhases = (
+				F1000001AAAAAAAA /* Sources */,
+				D1000000AAAAAAAA /* Frameworks */,
+				F1000002AAAAAAAA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WebSearch;
+			productName = WebSearch;
+			productReference = C1000000AAAAAAAA /* WebSearch.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		089C1665FE841209C02AAC07 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					F1000000AAAAAAAA = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = F1000020AAAAAAAA /* Build configuration list for PBXProject "WebSearch" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E1000000AAAAAAAA;
+			productRefGroup = E1000099AAAAAAAA /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F1000000AAAAAAAA /* WebSearch */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F1000002AAAAAAAA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000050AAAAAAAA /* Assets.xcassets in Resources */,
+				A1000051AAAAAAAA /* Preview Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		F1000001AAAAAAAA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000001AAAAAAAA /* WebSearchApp.swift in Sources */,
+				A1000002AAAAAAAA /* AppDelegate.swift in Sources */,
+				A1000010AAAAAAAA /* User.swift in Sources */,
+				A1000011AAAAAAAA /* Channel.swift in Sources */,
+				A1000012AAAAAAAA /* FeedItem.swift in Sources */,
+				A1000013AAAAAAAA /* SavedVideo.swift in Sources */,
+				A1000014AAAAAAAA /* Collection.swift in Sources */,
+				A1000015AAAAAAAA /* WatchState.swift in Sources */,
+				A1000020AAAAAAAA /* APIClient.swift in Sources */,
+				A1000021AAAAAAAA /* AuthService.swift in Sources */,
+				A1000022AAAAAAAA /* PlayerService.swift in Sources */,
+				A1000030AAAAAAAA /* KeychainManager.swift in Sources */,
+				A1000040AAAAAAAA /* ContentView.swift in Sources */,
+				A1000041AAAAAAAA /* LoginView.swift in Sources */,
+				A1000042AAAAAAAA /* FeedView.swift in Sources */,
+				A1000043AAAAAAAA /* FeedViewModel.swift in Sources */,
+				A1000044AAAAAAAA /* FeedItemRow.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		F1000011AAAAAAAA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"WebSearch/Preview Content\"";
+				DEVELOPMENT_TEAM = PJV7U329Q6;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WebSearch/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = audio;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.websearch.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F1000012AAAAAAAA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"WebSearch/Preview Content\"";
+				DEVELOPMENT_TEAM = PJV7U329Q6;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WebSearch/Info.plist;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIBackgroundModes = audio;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.websearch.app;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		F1000021AAAAAAAA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		F1000022AAAAAAAA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		F1000010AAAAAAAA /* Build configuration list for PBXNativeTarget "WebSearch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F1000011AAAAAAAA /* Debug */,
+				F1000012AAAAAAAA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F1000020AAAAAAAA /* Build configuration list for PBXProject "WebSearch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F1000021AAAAAAAA /* Debug */,
+				F1000022AAAAAAAA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 089C1665FE841209C02AAC07 /* Project object */;
+}

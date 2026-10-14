@@ -65,3 +65,7 @@ meili_data/
 dumps/
 meilisearch.exe
 meilisearch
+
+# Xcode
+xcuserdata/
+DerivedData/
