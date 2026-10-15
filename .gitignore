@@ -69,3 +69,10 @@ meilisearch
 # Xcode
 xcuserdata/
 DerivedData/
+
+# Android
+.gradle/
+.kotlin/
+.idea/
+local.properties
+android/**/build/
